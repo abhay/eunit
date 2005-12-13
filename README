@@ -1,0 +1,9 @@
+Launch example unit test with:
+
+erl -config sys.config
+
+and then
+
+eunit:run([eunit_examples], {suffix, "_test"}).
+
+This version is compliant with Aegis configuration management system.

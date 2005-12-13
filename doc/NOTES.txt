@@ -1,0 +1,236 @@
+
+Concepts:
+ - separation of tests and test runners (different ways of reporting)
+
+   * tests represented by data structures
+   * traversal and execution are separated
+
+ - test engine as a producer/iterator: run next, step back, repeat...
+
+   * iterators working
+
+ - test module - a container (as in 'eunit:run(M)'); automatic test collection
+
+   * works; a module name can be used to represent its set of tests.
+
+ - single tests (exported nullary functions, to be called directly)
+
+   * works; has drawbacks (no comments, context, or order, many
+     functions)
+
+ - abstraction of tests, for reuse
+
+   * tests are just nullary funs; this is both simple and powerful
+   * you can use 'fun name/arity' or 'fun module:name/arity' for sharing code
+   * maketest-functions are used to create specialized test funs
+
+ - executing a test by calling directly should have observable failure/success 
+
+ - tests should not in themselves output test results to console or otherwise
+
+   * tests succeed by returning properly (any return value)
+
+   * tests fail by throwing an exception (any exception)
+
+ - it should be possible to run single tests without eunit runtime support
+
+   * just apply to () and see if they throw an exception or not
+   * more complex representations need eunit support functions
+
+ - it should be possible to write tests without requiring eunit headers
+
+   * using plain tuples, funs, atoms, and lists to represent tests
+
+ - tests are identified by: module/sourcefile, test function name, line number
+
+   * funs have useful metadata
+
+ - Test functions must be identified as either directly callable or as
+   returning one or more test representations. We cannot just try to
+   call and check the result - it would not be possible to _collect_
+   tests without accidentally _executing_ tests in that case. So, the
+   simplest form of test function should return a nullary fun. This can
+   be tested directly and easily by a user.
+
+   * Using a '_test_' suffix (as opposed to a '_test' suffix) for test
+     functions that return test _representations_ is a good idea, since
+     it makes it easy to accomodate both styles of writing tests, does
+     not break existing code, allows both types of functions to be
+     automatically detected, and makes it easy to write wrapper
+     functions. The underscore just before the opening parenthesis makes
+     it more visible than most other variants.
+
+ - decorating a normal module with common eunit entry functions?
+
+   * TODO
+
+ - label of a single test
+
+   * {"...", Test}
+
+ - context of a single test
+ - set up and tear down of context
+ - multiple tests within same context (single set up/tear down)
+
+   * {with, Setup, Teardown, Test}
+
+ - multiple tests using same context (individual set up/tear down)
+
+   * {foreach, Setup, Teardown, MakeTests}
+
+ - aggregation of tests in an order-dependent sequence
+
+   * TODO
+
+ - aggregation of tests in order-independent sets
+
+   * deep lists
+
+ - test suite (as in 'eunit:make_suite(M)', 'eunit:run_suite(S)')
+ - label of a test suite
+ - composition of test suites (always order-independent)
+
+   * deep lists and {"label", DeepList} works file
+
+ - extra header files for better macro namespace separation (eunit_...)
+
+   * TODO (the leading _ in the normal macros lessens the need for this)
+
+Extra features:
+ - starting one or more additional nodes to run tests or suites on
+
+   * TODO
+
+ - running tests in parallel
+
+   * TODO
+
+ - running a test or set of tests in a new process (like setup/teardown)
+
+   * TODO
+
+Tests for exported functions of a module should preferably be in a
+separate module. This is good in many ways, but mainly boils down to
+that modifying test code should not have to imply modifying source code,
+and vice versa. At the same time, it should be possible for a module to
+export test functions for private functions, and to have these tests
+conditionally compiled (use -ifndef(NOTEST) for this).
+
+It could be useful with a separate header file for including _code_ that
+implements standard eunit functions for a module (if and only if the
+NOTEST macro is not defined).
+
+pyunit uses 'failIf' and 'failUnless' as standard test names, and
+'assert' as a synonym for 'failUnless'.
+
+Junit/pyunit get a lot of context embedding for free due to the object
+oriented languages (using class members and inheritance); in Erlang,
+context must be passed to tests as arguments or through local variable
+bindings if there are multiple tests within a function clause. This is
+particularly important for reuse of tests with small variations. To be
+able to instantiate the environment of a set of tests when executing a
+setup, the setup must be a function which returns the test set and the
+cleanup function.
+
+Module and parent function can always be found as metadata for the fun
+itself, using erlang:fun_info/2. When no line number and no description
+exists, it would be useful to report the ordinal number of a failing
+test within its parent group (keep the counts as state of traversal).
+
+A list of tests represents an order-independent set. It can be expected
+that the tests will be run in order, but it is not required and tests
+may even be executed in parallel. Labeling a set of tests does not
+change its meaning.
+
+Wrapping a set of tests in a 'with' implies that the setup is executed,
+then _all_ the tests (those returned by the maketest fun) are executed,
+and finally the cleanup is executed regardless of whether any tests
+failed or not. If the setup itself failed, the whole test set _and_ the
+cleanup is skipped (there is no setup-result that can be passed to the
+cleanup).
+
+Wrapping a (deep) list of maketests in a 'foreach' is equivalent to
+wrapping each individual maketest in the list in a corresponding 'with',
+regardless of nesting depth. E.g., foreach(a, [foreach(b, [t1, t2]),
+foreach(c, [t3, t4])]) is equivalent to [with(a, with(b, t1)), with(a,
+with(b, t2)), with(a, with(c, t3)), with(a, with(c, t4))]. Note that
+'foreach' does not distribute over 'with', since the nesting level of
+'with' must be preserved.
+
+While a plain 'foreach' can be done over any set of maketests, a
+'foreach1' requires that there is a pairing of argument+maketest for
+each element.
+
+Possible representations:
+
+    Test:
+	Module := atom()
+	Fun := fun () -> ..., ok end | {ModuleName, FunctionName}
+
+	Fun
+	{Line, Fun}
+	Module
+	{"Description", Fun}
+	{"Description", Module}
+	{"Description", {Line, Fun}}
+
+    Tests:
+	Test
+	[Test]
+	{"Description", [Tests]}
+
+    Setup/Teardown
+	Setup0 := fun () -> ..., SetupResult end
+	Setup1 := fun (Arg) -> ..., SetupResult end
+	Cleanup := fun (SetupResult) -> ..., ok end
+	MakeTests := fun (SetupResult) -> Tests end
+	MakeMakeTests := fun (Arg) -> MakeTests end
+
+	{with, Setup0, Cleanup, MakeTests}
+	{foreach, Setup, Cleanup, [MakeTests]}
+	{foreach1, Setup1, Cleanup, [{Arg, MakeMakeTests}]}
+
+Lists of tests/maketests/arg+makemaketests can all be deep, but every
+sublist must be properly terminated.
+
+Test Set Traversal Operations (traversal only - no execution here):
+
+     Init: create iterator from test representation.
+     Next: the most common operation - get the next test or group
+     Previous: step back to the previous operation (in the group)
+     Enter: enter a group, executing any side effects
+     Browse: enter a group without triggering side effects
+     Up: leave the current group
+
+Problem: cannot browse a 'with'-group unless you are able to instantiate
+the maketest fun, and to do that you either need the actual result from
+the 'setup' fun, or you need to know if the maketest fun expects an
+argument matching a certain pattern, such as a 3-tuple. You could then
+pass dummy values such as 'undefined' for the components, since they
+will not be used unless you try to run one of the instantiated tests or
+a setup fun of a subgroup. If the maketest fun was an n-ary fun, instead
+of a unary one, one could use the fun-info to generate dummy arguments -
+that's not very nice, and forces you to always return a list (or tuple)
+of arguments from the setup fun, using 'apply' to pass the arguments to
+the maketest fun. Ugly.
+
+(Interesting point: using destructive update, it would simply not be
+necessary to instantiate the local environment of the maketest.)
+
+If there was never a fun that returned a list of tests, but only funs
+around single tests, it would be simple - just don't apply any funs
+while traversing. But then it would be necessary to wrap each test
+within a 'with' in its own maketest fun, which would be a pain, and it
+would not be possible to nest 'with' groups in an easy way (variables
+bound in the outer group would have to be explicitly passed to the
+maketest funs in the inner group, using manual closure conversion). This
+is simply not tolerable. So, dummy value instantiation is the only way
+to go, if it should be possible at all to browse test groups without
+executing setup/cleanup funs.
+
+Solution: a 'browser' function that tries to pass variants of dummy
+values to a fun until it either succeeds or fails with some other error
+than 'fun_clause'.
+
+If a group is being browsed, no tests can be run, and all subgroups can
+only be further Browsed, not Entered.
