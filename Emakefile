@@ -1,3 +1,3 @@
-{'src/eunit',          [{outdir, "ebin"}, {i, "inc"}]}.
-{'src/eunit_examples', [{outdir, "ebin"}, {i, "inc"}]}.
+{'src/eunit',          [{outdir, "ebin"}, {i, "include"}]}.
+{'src/eunit_examples', [{outdir, "ebin"}, {i, "include"}]}.
 {'src/eunit_lib',      [{outdir, "ebin"}]}.

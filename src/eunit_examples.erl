@@ -68,7 +68,7 @@
 %% atom <code>zogzog</code> as parameter
 %% <br/>
 %% If you want to benefit from helper macros when writing tests, you should include the eunit.hrl file:
-%%  -include_lib("eunit/inc/eunit.hrl").
+%%  -include_lib("eunit/include/eunit.hrl").
 %% @end
 
 -module(eunit_examples).
@@ -79,7 +79,6 @@
 	 not_a_eunit_test/1]).
 
 -include("eunit.hrl").
-%%-include_lib("eunit/inc/eunit.hrl").
 
 %% @spec standard_test() -> ok
 %% @doc
