@@ -11,7 +11,7 @@
 
 -compile(export_all).
 
--include("unit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 succeed() ->
     ok.
