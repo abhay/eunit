@@ -116,5 +116,5 @@ failed_test() ->
 %% considered as unit tests. Only functions matching suffix or prefix
 %% pattern with an arity of zero are executed.
 %% @end
-not_a_eunit_test(Param) ->
+not_a_eunit_test(_Param) ->
     ok.
