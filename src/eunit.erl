@@ -16,6 +16,8 @@
 %% @copyright 2004-2005 Mickaël Rémond, Richard Carlsson
 %% @author Mickaël Rémond <mickael.remond@process-one.net>
 %%   [http://www.process-one.net/]
+%% @author Richard Carlsson <richardc@csd.uu.se>
+%%   [http://www.csd.uu.se/~richardc/]
 %% @version {@vsn}, {@date} {@time}
 %% @end
 
@@ -32,9 +34,26 @@
 %% Aaegis support
 -export([erlfilename/1]).
 
+
 -import(lists, [foldr/3]).
 
 -include("eunit.hrl").
+
+
+%% Type definitions for describing exceptions
+%%
+%% @type exception() = {exceptionClass(), Reason::term(), stackTrace()}
+%%
+%% @type exceptionClass() = error | exit | throw
+%%
+%% @type stackTrace() = [{moduleName(), functionName(),
+%%			  arity() | argList()}]
+%%
+%% @type moduleName() = atom()
+%% @type functionName() = atom()
+%% @type arity() = integer()
+%% @type mfa() = {moduleName(), functionName(), arity()}
+%% @type argList() = [term()]
 
 
 %% =====================================================================
@@ -80,23 +99,29 @@ selftest() -> run(?MODULE).
 %% ---------------------------------------------------------------------
 %% Client code (traverse, execute, print)
 
--record(state, {succeed = 0, fail = 0}).
+-record(state, {succeed = 0, fail = 0, aborted = false}).
 
 run(M) ->
     St1 = run_1(M, 0, #state{}),
     io:fwrite("================================\n"
 	      "  Failed: ~w.  Succeeded: ~w.\n",
 	      [St1#state.fail, St1#state.succeed]),
-    if St1#state.fail > 0 -> failed;
+    if St1#state.aborted ->
+	    io:fwrite("\n*** the testing was prematurely aborted *** \n");
+       true ->
+	    ok
+    end,
+    if (St1#state.fail > 0) or St1#state.aborted -> failed;
        true -> ok
     end.
     
 %% internal use only
+
 run_1(M, In, St) ->
     loop(init(M), In, St).
-    
+
 loop(I, In, St) ->
-    case next(I) of
+    try next(I) of
 	{T, I1} ->
 	    St1 = case T of
 		      #test{} ->
@@ -115,7 +140,27 @@ loop(I, In, St) ->
 	    loop(I1, In, St1);
 	none ->
 	    St
+    catch
+	setup_failed ->
+	    abort("context setup failed", "", [], St);
+	cleanup_failed ->
+	    abort("context cleanup failed", "", [], St);
+	instantiation_failed ->
+	    abort("instantiation of subtests failed", "", [], St);
+	{bad_test, Bad} ->
+	    abort("bad test descriptor", "~p", [Bad], St);
+	{module_not_found, M} ->
+	    abort("test module not found", "~p", [M], St);
+	{generator_failed, {M, F, A}, Exception} ->
+	    abort(io_lib:format("test generator failed: ~w:~w/~w",
+				[M, F, A]),
+		  "~p", [Exception], St)
     end.
+
+abort(Title, Str, Args, St) ->
+    io:fwrite("\n*** ~s ***\n::~s\n\n",
+	      [Title, io_lib:format(Str, Args)]),
+    St#state{aborted = true}.
 
 indent(N) when is_integer(N), N >= 1 ->
     io:put_chars(lists:duplicate(N * 2, $\s));
@@ -135,18 +180,33 @@ run_1(T, In) ->
 		   undefined -> "";
 		   Desc -> io_lib:fwrite(" (~s)", [Desc])
 	       end]),
-    case run_test(T) of
+    try run_test(T) of
 	ok ->
 	    io:fwrite("ok\n"),
 	    ok;
 	{error, _Reason} ->
 	    io:fwrite("*failed*\n::~p\n\n", [_Reason]),
 	    error
+    catch
+	{module_not_found, M} ->
+	    run_2("missing module: ~w", [M]),
+	    error;
+	{no_such_function, {M,F,A}} ->
+	    run_2("no such function: ~w:~w/~w", [M, F, A]);
+	Class:Reason ->
+	    run_2("internal error: ~p", [{Class, Reason, get_stacktrace()}])
     end.
+
+run_2(Str, Args) ->
+    io:fwrite("** did not run **\n::~s\n\n", [io_lib:format(Str, Args)]),
+    error.
 
 
 %% ---------------------------------------------------------------------
 %% Test runner
+
+%% @spec (Test) -> ok | {error, exception()}
+%% @throws wrapperError()
 
 run_test(#test{f = F}) ->
     run_testfun(F).
@@ -157,12 +217,9 @@ run_testfun(F) ->
     of _ ->
 	    ok
     catch
-	throw:{unit_test_internal_error, Term} ->
-	    %% Internally generated - pass it on (lose the trace)
+	{eunit_failure, Term} ->
+	    %% Internally generated: re-throw Term (lose the trace)
 	    throw(Term);
-	throw:{unit_test_error, Reason} ->
-	    %% Compensate for any internal re-throwing
-	    {error, Reason};
 	Class:Reason ->
 	    {error, {Class, Reason, get_stacktrace()}}
     end.
@@ -200,8 +257,24 @@ macro_test_() ->
 	     end)
      ]}.
 
+wrapper_test_() ->
+    {"error handling in function wrapper",
+     [?_assertException(throw, {module_not_found, eunit_nonexisting},
+			run_testfun(function_wrapper(eunit_nonexisting,test))),
+      ?_assertException(throw,
+			{no_such_function, {eunit,nonexisting_test,0}},
+			run_testfun(function_wrapper(eunit,nonexisting_test))),
+      ?_test({error, {error, undef, _T}}
+	     = run_testfun(function_wrapper(eunit,wrapper_test_helper)))
+     ]}.
+
+wrapper_test_helper() ->
+    {ok, ?MODULE:nonexisting_function()}.
+
 -endif.
 
+
+%% @throws setup_failed | instantiation_failed | cleanup_failed
 
 enter(#context{setup = S, cleanup = C, instantiate = M}, Fun) ->
     try S() of
@@ -237,6 +310,10 @@ enter(#context{setup = S, cleanup = C, instantiate = M}, Fun) ->
 init(Tests) ->
     #iter{tests = Tests}.
 
+%% @throws {bad_test, term()}
+%%       | {generator_failed, mfa(), exception()}
+%%       | {module_not_found, moduleName()}
+
 next(I = #iter{next = []}) ->
     case tests__next(I#iter.tests) of
 	{T, Tests} ->
@@ -259,6 +336,10 @@ prev(#iter{prev = [T | Ts]} = I) ->
 
 %% ---------------------------------------------------------------------
 %% Concrete test representation iterator
+
+%% @throws {bad_test, term()}
+%%       | {generator_failed, mfa(), exception()}
+%%       | {module_not_found, moduleName()}
 
 tests__next(Tests) ->
     case dlist__next(Tests) of
@@ -327,7 +408,7 @@ analyze_function(F) when is_function(F) ->
 	    throw({bad_test, F})
     end;
 analyze_function({M, F}) when is_atom(M), is_atom(F) ->
-    #test{f = named_function_wrapper(M, F), module = M, name = F};
+    #test{f = function_wrapper(M, F), module = M, name = F};
 analyze_function(M) when is_atom(M) ->
     module_testfuns(M);
 analyze_function(T) when is_list(T) ->
@@ -446,8 +527,13 @@ is_string_test_() ->
 
 fun_parent(F) ->
     {name, N} = erlang:fun_info(F, name),
-    S = atom_to_list(N),
-    list_to_atom(string:sub_string(S, 2, string:chr(S, $/) - 1)).
+    case erlang:fun_info(F, type) of
+	{type, external} ->
+	    N;
+	{type, local} ->
+	    S = atom_to_list(N),
+	    list_to_atom(string:sub_string(S, 2, string:chr(S, $/) - 1))
+    end.
 
 -ifndef(NOTEST).
 
@@ -458,6 +544,9 @@ fun_parent_test() ->
 
 
 %% Extracting test funs from a module
+
+%% @throws {generator_failed, mfa(), exception()}
+%%       | {module_not_found, moduleName()}
 
 module_testfuns(M) ->
     TestSuffix = "_test",
@@ -493,15 +582,23 @@ generate_testfun(M, F) ->
     catch
 	Class:Reason ->
 	    Where = {M, F, 0},
-	    throw({{generator_failed, Where},
+	    throw({generator_failed, Where,
 		   {Class, Reason, get_stacktrace([Where])}})
     end.
 
 
-%% Better error reporting from named function tests
+%% Wrapper for simple "named function" tests ({M,F}), which provides
+%% better error reporting when the function is missing at test time.
+%%
+%% Note that the wrapper fun is usually called by run_testfun/1, and the
+%% special exceptions thrown here are expected to be handled there.
+%%
+%% @throws {eunit_failure, wrapperError()}
+%%
+%%     wrapperError() = {no_such_function, mfa()}
+%%                    | {module_not_found, moduleName()}
 
-named_function_wrapper(M, F) ->
-    %% This attempts to detect named functions missing at test time.
+function_wrapper(M, F) ->
     fun () ->
  	    try M:F()
  	    catch
@@ -509,28 +606,27 @@ named_function_wrapper(M, F) ->
  		    %% Check if it was M:F/0 that was undefined
  		    case erlang:module_loaded(M) of
  			false ->
- 			    internal_error({module_not_found, M});
+ 			    fail({module_not_found, M});
  			true ->
  			    case erlang:function_exported(M, F, 0) of
  				false ->
- 				    internal_error({no_such_function,
-						    {M, F, 0}});
+ 				    fail({no_such_function, {M, F, 0}});
  				true ->
- 				    external_error(error, undef,
-						   [{M, F, 0}])
+ 				    rethrow(error, undef, [{M, F, 0}])
  			    end
  		    end
  	    end
     end.
 
-external_error(Class, Reason, Trace) ->
-    throw({unit_test_error, {Class, Reason, get_stacktrace(Trace)}}).
+rethrow(Class, Reason, Trace) ->
+    erlang:raise(Class, Reason, get_stacktrace(Trace)).
 
-internal_error(Term) ->
-    throw({unit_test_internal_error, Term}).				   
+fail(Term) ->
+    throw({eunit_failure, Term}).				   
 
-
-%% Cleaning up a stack trace
+%% Getting a cleaned up stack trace. (We don't want it to include
+%% eunit's own internal functions. This complicates self-testing
+%% somewhat, but you can't have everything.)
 
 get_stacktrace() ->
     get_stacktrace([]).
@@ -568,6 +664,8 @@ uniq_test_() ->
 %% Apply arbitrary unary function F with dummy arguments. (F must be
 %% side effect free! It will be called repeatedly.)
 
+%% @throws {badarity, {function(), arity()}}
+
 browse_fun(F) ->
     browse_fun(F, values()).
 
@@ -589,7 +687,7 @@ browse_fun(F, Next) ->
 try_apply(F, Arg) ->
     case erlang:fun_info(F, arity) of
 	{arity, 1} -> ok;
-	_ -> throw(badarity)
+	_ -> throw({badarity, {F, 1}})
     end,
     {module, M} = erlang:fun_info(F, module),
     {name, N} = erlang:fun_info(F, name),
@@ -639,8 +737,8 @@ lists(_) ->
 
 browse_fun_test_() ->
     {"browsing funs",
-     [?_assertThrow(badarity, browse_fun(fun () -> ok end)),
-      ?_assertThrow(badarity, browse_fun(fun (_,_) -> ok end)),
+     [?_assertThrow({badarity, {_, 1}}, browse_fun(fun () -> ok end)),
+      ?_assertThrow({badarity, {_, 1}}, browse_fun(fun (_,_) -> ok end)),
       ?_test({ok, _, 17} = browse_fun(fun (_) -> 17 end)),
       ?_test({ok, _, 17} = browse_fun(fun (undefined) -> 17 end)),
       ?_test({ok, _, 17} = browse_fun(fun (ok) -> 17 end)),
