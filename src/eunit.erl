@@ -120,6 +120,8 @@ run(M) ->
 run_1(M, In, St) ->
     loop(init(M), In, St).
 
+loop(_I, _In, St = #state{aborted = true}) ->
+    St;
 loop(I, In, St) ->
     try next(I) of
 	{T, I1} ->
@@ -135,18 +137,23 @@ loop(I, In, St) ->
 			  io:nl(),
 			  run_1(T#group.tests, In + 1, St);
 		      #context{} ->
-			  enter(T, fun (T) -> run_1(T, In, St) end)
+			  try enter(T, fun (T) -> run_1(T, In, St) end)
+			  catch
+			      setup_failed ->
+				  abort("context setup failed",
+					"", [], St);
+			      cleanup_failed ->
+				  abort("context cleanup failed", "",
+					[], St);
+			      instantiation_failed ->
+				  abort("instantiation of subtests failed",
+					"", [], St)
+			  end
 		  end,
 	    loop(I1, In, St1);
 	none ->
 	    St
     catch
-	setup_failed ->
-	    abort("context setup failed", "", [], St);
-	cleanup_failed ->
-	    abort("context cleanup failed", "", [], St);
-	instantiation_failed ->
-	    abort("instantiation of subtests failed", "", [], St);
 	{bad_test, Bad} ->
 	    abort("bad test descriptor", "~p", [Bad], St);
 	{module_not_found, M} ->
@@ -162,11 +169,6 @@ abort(Title, Str, Args, St) ->
 	      [Title, io_lib:format(Str, Args)]),
     St#state{aborted = true}.
 
-indent(N) when is_integer(N), N >= 1 ->
-    io:put_chars(lists:duplicate(N * 2, $\s));
-indent(_) ->
-    ok.
-    
 run_1(T, In) ->
     indent(In),
     io:fwrite("~s:~s~s~s...",
@@ -201,6 +203,10 @@ run_2(Str, Args) ->
     io:fwrite("** did not run **\n::~s\n\n", [io_lib:format(Str, Args)]),
     error.
 
+indent(N) when is_integer(N), N >= 1 ->
+    io:put_chars(lists:duplicate(N * 2, $\s));
+indent(_) ->
+    ok.
 
 %% ---------------------------------------------------------------------
 %% Test runner
