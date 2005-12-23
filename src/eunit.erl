@@ -99,17 +99,29 @@ selftest() -> run(?MODULE).
 %% ---------------------------------------------------------------------
 %% Client code (traverse, execute, print)
 
--record(state, {succeed = 0, fail = 0, aborted = false}).
+-record(state, {succeed = 0, fail = 0, aborted = false, browse = false}).
 
 run(M) ->
-    St1 = run_1(M, 0, #state{}),
-    io:fwrite("================================\n"
-	      "  Failed: ~w.  Succeeded: ~w.\n",
-	      [St1#state.fail, St1#state.succeed]),
-    if St1#state.aborted ->
-	    io:fwrite("\n*** the testing was prematurely aborted *** \n");
-       true ->
-	    ok
+    run_0(M, false).
+
+list(M) ->
+    run_0(M, true).
+
+run_0(M, Browse) ->
+    St1 = run_1(M, 0, #state{browse = Browse}),
+    case St1#state.browse of
+	true ->
+	    ok;
+	false ->
+	    io:fwrite("================================\n"
+		      "  Failed: ~w.  Succeeded: ~w.\n",
+		      [St1#state.fail, St1#state.succeed]),
+	    if St1#state.aborted ->
+		    io:fwrite("\n*** the testing was "
+			      "prematurely aborted *** \n");
+	       true ->
+		    ok
+	    end
     end,
     if (St1#state.fail > 0) or St1#state.aborted -> failed;
        true -> ok
@@ -127,7 +139,7 @@ loop(I, In, St) ->
 	{T, I1} ->
 	    St1 = case T of
 		      #test{} ->
-			  case run_1(T, In) of
+			  case handle_test(T, In, St#state.browse) of
 			      ok -> St#state{succeed = St#state.succeed + 1};
 			      error -> St#state{fail = St#state.fail + 1}
 			  end;
@@ -137,7 +149,8 @@ loop(I, In, St) ->
 			  io:nl(),
 			  run_1(T#group.tests, In + 1, St);
 		      #context{} ->
-			  try enter(T, fun (T) -> run_1(T, In, St) end)
+			  try enter(St#state.browse,
+				    T, fun (T) -> run_1(T, In, St) end)
 			  catch
 			      setup_failed ->
 				  abort("context setup failed",
@@ -169,9 +182,9 @@ abort(Title, Str, Args, St) ->
 	      [Title, io_lib:format(Str, Args)]),
     St#state{aborted = true}.
 
-run_1(T, In) ->
+handle_test(T, In, Browse) ->
     indent(In),
-    io:fwrite("~s:~s~s~s...",
+    io:fwrite("~s:~s~s~s",
 	      [T#test.module, 
 	       case T#test.line of
 		   0 -> "";
@@ -182,24 +195,32 @@ run_1(T, In) ->
 		   undefined -> "";
 		   Desc -> io_lib:fwrite(" (~s)", [Desc])
 	       end]),
-    try run_test(T) of
-	ok ->
-	    io:fwrite("ok\n"),
-	    ok;
-	{error, _Reason} ->
-	    io:fwrite("*failed*\n::~p\n\n", [_Reason]),
-	    error
-    catch
-	{module_not_found, M} ->
-	    run_2("missing module: ~w", [M]),
-	    error;
-	{no_such_function, {M,F,A}} ->
-	    run_2("no such function: ~w:~w/~w", [M, F, A]);
-	Class:Reason ->
-	    run_2("internal error: ~p", [{Class, Reason, get_stacktrace()}])
+    case Browse of
+	true ->
+	    io:fwrite("\n");
+	false ->
+	    io:fwrite("..."),
+	    try run_test(T) of
+		ok ->
+		    io:fwrite("ok\n"),
+		    ok;
+		{error, _Reason} ->
+		    io:fwrite("*failed*\n::~p\n\n", [_Reason]),
+		    error
+	    catch
+		{module_not_found, M} ->
+		    test_skipped("missing module: ~w", [M]),
+		    error;
+		{no_such_function, {M,F,A}} ->
+		    test_skipped("no such function: ~w:~w/~w",
+				 [M, F, A]);
+		Class:Reason ->
+		    test_skipped("internal error: ~p",
+				 [{Class, Reason, get_stacktrace()}])
+	    end
     end.
 
-run_2(Str, Args) ->
+test_skipped(Str, Args) ->
     io:fwrite("** did not run **\n::~s\n\n", [io_lib:format(Str, Args)]),
     error.
 
@@ -279,18 +300,38 @@ wrapper_test_helper() ->
 
 -endif.
 
-
+%% @spec (Browse::bool(), Tests::#context{}, Callback::(any()) -> any())
+%%       -> any()
 %% @throws setup_failed | instantiation_failed | cleanup_failed
 
-enter(#context{setup = S, cleanup = C, instantiate = M}, Fun) ->
-    try S() of
+enter(false, #context{setup = S, cleanup = C, instantiate = I}, F) ->
+    enter(S, C, I, F);
+enter(true, #context{instantiate = I}, F) ->
+    %% Browse: dummy setup/cleanup and a wrapper for the instantiator
+    S = fun () -> ok end,
+    C = fun (_) -> ok end,
+    I1 = fun (_) ->
+		try browse_fun(I) of
+		    {ok, _, T} ->
+			T;
+		    error ->
+			throw(instantiation_failed)
+		catch
+		    _:_ ->
+			throw(instantiation_failed)
+		end
+	 end,
+    enter(S, C, I1, F).
+
+enter(Setup, Cleanup, Instantiate, Callback) ->
+    try Setup() of
 	R ->
-	    try M(R) of
+	    try Instantiate(R) of
 		T ->
-		    try Fun(T)  %% call back to client code
+		    try Callback(T)  %% call back to client code
 		    after
 			%% Always run cleanup; client may be an idiot
-			try C(R)
+			try Cleanup(R)
 			catch
 			    _:_ -> throw(cleanup_failed)
 			end
@@ -667,13 +708,15 @@ uniq_test_() ->
 
 -endif.
 
-%% Apply arbitrary unary function F with dummy arguments. (F must be
-%% side effect free! It will be called repeatedly.)
+%% Apply arbitrary unary function F with dummy arguments "until it
+%% works". (F must be side effect free! It will be called repeatedly.)
+%% No exceptions will be thrown unless the function actually crashes for
+%% some other reason than being unable to match the argument.
 
-%% @throws {badarity, {function(), arity()}}
+%% @spec (F::(any()) -> any()) -> {ok, Value::any(), Result::any()} | error
 
 browse_fun(F) ->
-    browse_fun(F, values()).
+    browse_fun(F, arg_values()).
 
 browse_fun(F, Next) ->
     case Next() of
@@ -683,12 +726,19 @@ browse_fun(F, Next) ->
 		    {ok, V, Result};
 		{error, function_clause} ->
 		    browse_fun(F, Next1);
-		{error, Reason} ->
-		    {error, Reason}
+		{error, {Class, Reason, Trace}} ->
+		    erlang:raise(Class, Reason, Trace)
 	    end;
-	[] ->	
-	    {error, no_match}
+	[] ->
+	    error
     end.
+
+%% Apply argument to function and report whether it succeeded (and with
+%% what return value), or failed due to a simple top-level
+%% function_clause error, or if it crashed in some other way.
+
+%% @spec (F::(any()) -> any(), V::any()) -> 
+%%     {ok, Result::any()} | {error, function_clause | exception()}
 
 try_apply(F, Arg) ->
     case erlang:fun_info(F, arity) of
@@ -714,29 +764,29 @@ try_apply(F, Arg) ->
 
 %% test value producers for function browsing
 
-values() ->
-    Vs = [undefined, ok, true],
-    fun () -> values(Vs) end.
+arg_values() ->
+    Vs = [undefined, ok, true, false, 0, 1],
+    fun () -> arg_values(Vs) end.
 
-values([V | Vs]) ->
-    [V | fun () -> values(Vs) end];
-values(_) ->
-    (tuples())().
+arg_values([V | Vs]) ->
+    [V | fun () -> arg_values(Vs) end];
+arg_values(_) ->
+    (arg_tuples())().
 
-tuples() ->
-    fun () -> tuples(0) end.
+arg_tuples() ->
+    fun () -> arg_tuples(0) end.
 
-tuples(N) when N >= 0, N =< 12 ->
-    [erlang:make_tuple(N, undefined) | fun () -> tuples(N + 1) end];
-tuples(_) ->
-    (lists())().
+arg_tuples(N) when N >= 0, N =< 12 ->
+    [erlang:make_tuple(N, undefined) | fun () -> arg_tuples(N + 1) end];
+arg_tuples(_) ->
+    (arg_lists())().
 
-lists() ->
-    fun () -> lists(0) end.
+arg_lists() ->
+    fun () -> arg_lists(0) end.
 
-lists(N) when N >= 0, N =< 12 ->
-    [lists:duplicate(N, undefined) | fun () -> lists(N + 1) end];
-lists(_) ->
+arg_lists(N) when N >= 0, N =< 12 ->
+    [lists:duplicate(N, undefined) | fun () -> arg_lists(N + 1) end];
+arg_lists(_) ->
     [].
 
 -ifndef(NOTEST).
