@@ -169,12 +169,13 @@ loop(I, In, St) ->
     catch
 	{bad_test, Bad} ->
 	    abort("bad test descriptor", "~p", [Bad], St);
+	{no_such_function, {M,F,A}} ->
+	    abort(io_lib:format("no such function: ~w:~w/~w", [M,F,A]),
+		  "", [], St);
 	{module_not_found, M} ->
 	    abort("test module not found", "~p", [M], St);
-	{generator_failed, {M, F, A}, Exception} ->
-	    abort(io_lib:format("test generator failed: ~w:~w/~w",
-				[M, F, A]),
-		  "~p", [Exception], St)
+	{generator_failed, Exception} ->
+	    abort("test generator failed", "~p", [Exception], St)
     end.
 
 abort(Title, Str, Args, St) ->
@@ -201,7 +202,7 @@ handle_test(T, In, Browse) ->
 	false ->
 	    io:fwrite("..."),
 	    try run_test(T) of
-		ok ->
+		{ok, _} ->
 		    io:fwrite("ok\n"),
 		    ok;
 		{error, _Reason} ->
@@ -212,8 +213,7 @@ handle_test(T, In, Browse) ->
 		    test_skipped("missing module: ~w", [M]),
 		    error;
 		{no_such_function, {M,F,A}} ->
-		    test_skipped("no such function: ~w:~w/~w",
-				 [M, F, A]);
+		    test_skipped("no such function: ~w:~w/~w", [M,F,A]);
 		Class:Reason ->
 		    test_skipped("internal error: ~p",
 				 [{Class, Reason, get_stacktrace()}])
@@ -232,17 +232,20 @@ indent(_) ->
 %% ---------------------------------------------------------------------
 %% Test runner
 
-%% @spec (Test) -> ok | {error, exception()}
+%% @spec (#test{}) -> {ok, Value} | {error, exception()}
 %% @throws wrapperError()
 
 run_test(#test{f = F}) ->
     run_testfun(F).
 
+%% @spec ((any()) -> any()) -> {ok, Value} | {error, exception()}
+%% @throws wrapperError()
+
 run_testfun(F) ->
     try
 	F()
-    of _ ->
-	    ok
+    of Value ->
+	    {ok, Value}
     catch
 	{eunit_failure, Term} ->
 	    %% Internally generated: re-throw Term (lose the trace)
@@ -358,7 +361,7 @@ init(Tests) ->
     #iter{tests = Tests}.
 
 %% @throws {bad_test, term()}
-%%       | {generator_failed, mfa(), exception()}
+%%       | {generator_failed, exception()}
 %%       | {module_not_found, moduleName()}
 
 next(I = #iter{next = []}) ->
@@ -385,7 +388,8 @@ prev(#iter{prev = [T | Ts]} = I) ->
 %% Concrete test representation iterator
 
 %% @throws {bad_test, term()}
-%%       | {generator_failed, mfa(), exception()}
+%%       | {generator_failed, exception()}
+%%       | {no_such_function, mfa()}
 %%       | {module_not_found, moduleName()}
 
 tests__next(Tests) ->
@@ -438,6 +442,16 @@ analyze_test({S, T}) when is_list(S) ->
 	false ->
 	    throw({bad_test, {S, T}})
     end;
+analyze_test({generator, M, F}) when is_atom(M), is_atom(F) ->
+    analyze_test({generator, function_wrapper(M, F)});
+analyze_test({generator, F}) when is_function(F) ->
+    %% use run_testfun/1 to handle wrapper exceptions
+    case run_testfun(F) of
+	{ok, T} ->
+	    analyze_test(T);
+	{error, {Class, Reason, Trace}} ->
+	    throw({generator_failed, {Class, Reason, Trace}})
+    end;
 analyze_test(T) ->
     analyze_plain_test(T).
 
@@ -454,7 +468,7 @@ analyze_function(F) when is_function(F) ->
 	_ ->
 	    throw({bad_test, F})
     end;
-analyze_function({M, F}) when is_atom(M), is_atom(F) ->
+analyze_function({M,F}) when is_atom(M), is_atom(F) ->
     #test{f = function_wrapper(M, F), module = M, name = F};
 analyze_function(M) when is_atom(M) ->
     module_testfuns(M);
@@ -592,8 +606,7 @@ fun_parent_test() ->
 
 %% Extracting test funs from a module
 
-%% @throws {generator_failed, mfa(), exception()}
-%%       | {module_not_found, moduleName()}
+%% @throws {module_not_found, moduleName()}
 
 module_testfuns(M) ->
     TestSuffix = "_test",
@@ -608,7 +621,7 @@ module_testfuns(M) ->
 			      false ->
 				  case lists:suffix(GeneratorSuffix, N) of
 				      true ->
-					  [generate_testfun(M, F) | Fs];
+					  [{generator, M, F} | Fs];
 				      false ->
 					  Fs
 				  end
@@ -622,17 +635,6 @@ module_testfuns(M) ->
 	error:undef -> 
 	    throw({module_not_found, M})
     end.
-
-generate_testfun(M, F) ->
-    try M:F() of
-	Fun -> Fun
-    catch
-	Class:Reason ->
-	    Where = {M, F, 0},
-	    throw({generator_failed, Where,
-		   {Class, Reason, get_stacktrace([Where])}})
-    end.
-
 
 %% Wrapper for simple "named function" tests ({M,F}), which provides
 %% better error reporting when the function is missing at test time.
@@ -657,9 +659,9 @@ function_wrapper(M, F) ->
  			true ->
  			    case erlang:function_exported(M, F, 0) of
  				false ->
- 				    fail({no_such_function, {M, F, 0}});
+ 				    fail({no_such_function, {M,F,0}});
  				true ->
- 				    rethrow(error, undef, [{M, F, 0}])
+ 				    rethrow(error, undef, [{M,F,0}])
  			    end
  		    end
  	    end
