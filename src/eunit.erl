@@ -64,7 +64,7 @@
 %% Protocol records
 
 -record(test, {f = undefined,
-	       desc = undefined,
+	       desc = "",
 	       module = undefined,
 	       name = undefined,
 	       line = 0
@@ -74,7 +74,7 @@
 		  cleanup = undefined,
 		  instantiate = undefined}).
 
--record(group, {label = "",
+-record(group, {desc = "",
 		order = undefined,
 		tests = undefined}).
 
@@ -144,9 +144,14 @@ loop(I, In, St) ->
 			      error -> St#state{fail = St#state.fail + 1}
 			  end;
 		      #group{} ->
-			  indent(In),
-			  io:fwrite(T#group.label),
-			  io:nl(),
+			  %% Currently, order requirements are ignored 
+			  case T#group.desc of
+			      "" -> ok;
+			      Desc ->
+				  indent(In),
+				  io:fwrite(Desc),
+				  io:nl()
+			  end,
 			  run_1(T#group.tests, In + 1, St);
 		      #context{} ->
 			  try enter(St#state.browse,
@@ -193,7 +198,7 @@ handle_test(T, In, Browse) ->
 	       end,
 	       T#test.name,
 	       case T#test.desc of
-		   undefined -> "";
+		   "" -> "";
 		   Desc -> io_lib:fwrite(" (~s)", [Desc])
 	       end]),
     case Browse of
@@ -393,6 +398,8 @@ prev(#iter{prev = [T | Ts]} = I) ->
 %%        | {string(), Test}
 %%        | {generator, () -> Test}
 %%        | {generator, M::moduleName(), F::functionName()}
+%%        | {inorder, [Test]}
+%%        | {inparallel, [Test]}
 %%        | {with, Setup::() -> R::any(),
 %%                 Cleanup::(R::any()) -> any(),
 %%                 Instantiate::(R::any()) -> Test
@@ -464,19 +471,16 @@ tests__parse({generator, F}) when is_function(F) ->
     end;
 tests__parse({generator, M, F}) when is_atom(M), is_atom(F) ->
     tests__parse({generator, function_wrapper(M, F)});
-tests__parse({S, T}) when is_list(S) ->
-    case is_string(S) of
-	true ->
-	    case tests__parse(T) of
-		T1 = #test{} ->
-		    (T1)#test{desc = S};
-		_ ->
-		    %% redo analysis of T later
-		    #group{label = S, tests = T}
-	    end;
-	false ->
-	    throw({bad_test, {S, T}})
-    end;
+tests__parse({inorder, S, T} = T0) ->
+    tests__group(S, T, true, T0);
+tests__parse({inorder, T} = T0) ->
+    tests__group("", T, true, T0);
+tests__parse({inparallel, S, T} = T0) ->
+    tests__group(S, T, false, T0);
+tests__parse({inparallel, T} = T0) ->
+    tests__group("", T, false, T0);
+tests__parse({S, T} = T0) when is_list(S) ->
+    tests__group(S, T, undefined, T0);
 tests__parse(M) when is_atom(M) ->
     get_module_tests(M);
 tests__parse(T) when is_list(T) ->
@@ -502,6 +506,19 @@ tests__parse_function({M,F}) when is_atom(M), is_atom(F) ->
 tests__parse_function(F) ->
     throw({bad_test, F}).
 
+tests__group(Desc, T, Order, T0) ->
+    case is_string(Desc) of
+	true ->
+	    case tests__parse(T) of
+		T1 = #test{} ->
+		    (T1)#test{desc = Desc};
+		_ ->
+		    %% redo parsing of T later
+		    #group{desc = Desc, tests = T, order = Order}
+	    end;
+	false ->
+	    throw({bad_test, T0})
+    end.
 
 
 %% ---------------------------------------------------------------------
