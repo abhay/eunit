@@ -260,11 +260,11 @@ macro_test_() ->
     {"macro definitions",
      [{?LINE, fun () ->
 		      {?LINE, F} = ?_test(undefined),
-		      ok = run_testfun(F)
+		      {ok, ok} = run_testfun(F)
 	      end},
       ?_test(begin
 		 {?LINE, F} = ?_assert(true),
-		 ok = run_testfun(F)
+		 {ok, ok} = run_testfun(F)
 	     end),
       ?_test(begin
 		 {?LINE, F} = ?_assert(false),
@@ -273,7 +273,7 @@ macro_test_() ->
       ?_test(begin
 		 {?LINE, F} = ?_assertException(error, badarith,
 						erlang:error(badarith)),
-		 ok = run_testfun(F)
+		 {ok, ok} = run_testfun(F)
 	     end),
       ?_test(begin
 		 {?LINE, F} = ?_assertException(error, badarith, ok),
@@ -386,6 +386,31 @@ prev(#iter{prev = [T | Ts]} = I) ->
 
 %% ---------------------------------------------------------------------
 %% Concrete test representation iterator
+%%
+%% Test ::= SimpleTest
+%%        | [Test]
+%%        | moduleName()
+%%        | {string(), Test}
+%%        | {generator, () -> Test}
+%%        | {generator, M::moduleName(), F::functionName()}
+%%        | {with, Setup::() -> R::any(),
+%%                 Cleanup::(R::any()) -> any(),
+%%                 Instantiate::(R::any()) -> Test
+%%          }
+%%        | {foreach, Setup::() -> R::any(),
+%%                    Cleanup::(R::any()) -> any(),
+%%                    Instantiators::[(R::any()) -> Test]
+%%          }
+%%        | {foreach1, Setup::(A::any()) -> R::any(),
+%%                     Cleanup::(A::any(), R::any()) -> any(),
+%%                     Pairs::[{A::any(),
+%%                              (A::any(), R::any()) -> Test}]
+%%          }
+%%
+%% SimpleTest ::= TestFunction | {Line::integer(), TestFunction}
+%%
+%% TestFunction ::= () -> any()
+%%                | {M::moduleName(), F::functionName()}
 
 %% @throws {bad_test, term()}
 %%       | {generator_failed, exception()}
@@ -395,7 +420,7 @@ prev(#iter{prev = [T | Ts]} = I) ->
 tests__next(Tests) ->
     case dlist__next(Tests) of
 	[T | Ts] ->
-	    case analyze_test(T) of
+	    case tests__parse(T) of
 		Ts1 when is_list(Ts1) ->
 		    tests__next([Ts1 | Ts]);
 		T1 ->
@@ -405,16 +430,16 @@ tests__next(Tests) ->
 	    none
     end.
 
-analyze_test({with, S, C, F}) ->
-    #context{setup = S, cleanup = C, instantiate = F};
-analyze_test({foreach, S, C, Fs}) when is_list(Fs) ->
+tests__parse({with, S, C, I}) ->
+    #context{setup = S, cleanup = C, instantiate = I};
+tests__parse({foreach, S, C, Fs}) when is_list(Fs) ->
     case dlist__next(Fs) of
 	[F | Fs1] ->
 	    [{with, S, C, F} | {foreach, S, C, Fs1}];
 	[] ->
 	    []
     end;
-analyze_test({foreach1, S1, C1, Ps}) when is_list(Ps) ->
+tests__parse({foreach1, S1, C1, Ps}) when is_list(Ps) ->
     case dlist__next(Ps) of
 	[P | Ps1] ->
 	    case P of
@@ -429,10 +454,20 @@ analyze_test({foreach1, S1, C1, Ps}) when is_list(Ps) ->
 	[] ->
 	    []
     end;
-analyze_test({S, T}) when is_list(S) ->
+tests__parse({generator, F}) when is_function(F) ->
+    %% use run_testfun/1 to handle wrapper exceptions
+    case run_testfun(F) of
+	{ok, T} ->
+	    tests__parse(T);
+	{error, {Class, Reason, Trace}} ->
+	    throw({generator_failed, {Class, Reason, Trace}})
+    end;
+tests__parse({generator, M, F}) when is_atom(M), is_atom(F) ->
+    tests__parse({generator, function_wrapper(M, F)});
+tests__parse({S, T}) when is_list(S) ->
     case is_string(S) of
 	true ->
-	    case analyze_test(T) of
+	    case tests__parse(T) of
 		T1 = #test{} ->
 		    (T1)#test{desc = S};
 		_ ->
@@ -442,25 +477,19 @@ analyze_test({S, T}) when is_list(S) ->
 	false ->
 	    throw({bad_test, {S, T}})
     end;
-analyze_test({generator, M, F}) when is_atom(M), is_atom(F) ->
-    analyze_test({generator, function_wrapper(M, F)});
-analyze_test({generator, F}) when is_function(F) ->
-    %% use run_testfun/1 to handle wrapper exceptions
-    case run_testfun(F) of
-	{ok, T} ->
-	    analyze_test(T);
-	{error, {Class, Reason, Trace}} ->
-	    throw({generator_failed, {Class, Reason, Trace}})
-    end;
-analyze_test(T) ->
-    analyze_plain_test(T).
+tests__parse(M) when is_atom(M) ->
+    get_module_tests(M);
+tests__parse(T) when is_list(T) ->
+    T;
+tests__parse(T) ->
+    tests__parse_simple(T).
 
-analyze_plain_test({L, F}) when is_integer(L), L >= 0 ->
-    (analyze_plain_test(F))#test{line = L};
-analyze_plain_test(F) ->
-    analyze_function(F).
+tests__parse_simple({L, F}) when is_integer(L), L >= 0 ->
+    (tests__parse_simple(F))#test{line = L};
+tests__parse_simple(F) ->
+    tests__parse_function(F).
 
-analyze_function(F) when is_function(F) ->
+tests__parse_function(F) when is_function(F) ->
     case erlang:fun_info(F, arity) of
 	{arity, 0} ->
 	    {module, M} = erlang:fun_info(F, module),
@@ -468,13 +497,9 @@ analyze_function(F) when is_function(F) ->
 	_ ->
 	    throw({bad_test, F})
     end;
-analyze_function({M,F}) when is_atom(M), is_atom(F) ->
+tests__parse_function({M,F}) when is_atom(M), is_atom(F) ->
     #test{f = function_wrapper(M, F), module = M, name = F};
-analyze_function(M) when is_atom(M) ->
-    module_testfuns(M);
-analyze_function(T) when is_list(T) ->
-    T;
-analyze_function(F) ->
+tests__parse_function(F) ->
     throw({bad_test, F}).
 
 
@@ -608,7 +633,7 @@ fun_parent_test() ->
 
 %% @throws {module_not_found, moduleName()}
 
-module_testfuns(M) ->
+get_module_tests(M) ->
     TestSuffix = "_test",
     GeneratorSuffix = "_test_",
     try M:module_info(exports) of
