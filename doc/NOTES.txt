@@ -62,7 +62,7 @@ Concepts:
 
  - decorating a normal module with common eunit entry functions?
 
-   * TODO
+   * TODO (just adding an -include("..."). to a module)
 
  - label of a single test
 
@@ -76,15 +76,16 @@ Concepts:
 
  - multiple tests using same context (individual set up/tear down)
 
-   * {foreach, Setup, Teardown, MakeTests}
+   * {foreach, Setup, Teardown, MakeTests} |  {foreach1, ...}
 
  - aggregation of tests in an order-dependent sequence
+ - aggregation of tests in explicitly parallel sets
 
-   * TODO
+   * {inorder, T} | {inparallel, T}
 
- - aggregation of tests in order-independent sets
+ - aggregation of tests in unspecified-order sets
 
-   * deep lists
+   * deep lists represent generic test sets
 
  - test suite (as in 'eunit:make_suite(M)', 'eunit:run_suite(S)')
  - label of a test suite
@@ -103,11 +104,11 @@ Extra features:
 
  - running tests in parallel
 
-   * TODO
+   * TODO (actually _running_ tests in parallel, when allowed)
 
  - running a test or set of tests in a new process (like setup/teardown)
 
-   * TODO
+   * TODO (built-in support for making this as easy as possible)
 
 Tests for exported functions of a module should preferably be in a
 separate module. This is good in many ways, but mainly boils down to
