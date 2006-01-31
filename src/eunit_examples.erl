@@ -20,6 +20,9 @@
 %% @see eunit
 %% @doc Eunit_examples is a simple unit test module. It illustrates
 %% how to write eunit tests.
+%%
+%% <b>Note: currently, this describes only the eunit 1.1 behaviour.</b>
+%%
 %% Running those tests implies: 2 tests passing and 1 test failing
 %% <br/>
 %% The tests are run by issuing the following command from the Erlang
