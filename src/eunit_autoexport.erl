@@ -49,7 +49,12 @@ form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix) ->
 		true ->
 		    sets:add_element({Name, 0}, Tests);
 		false ->
-		    Tests
+		    case lists:suffix("_exported_", N) of
+			true ->
+			    sets:add_element({Name, 0}, Tests);
+			false ->
+			    Tests
+		    end
 	    end
     end;
 form(_, Tests, _, _) ->
