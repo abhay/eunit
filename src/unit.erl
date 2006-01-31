@@ -5,7 +5,7 @@
 %%
 %% @author Richard Carlsson <richard@virtutech.com>
 %% @copyright 2005 Richard Carlsson
-%% @doc 
+%% @private
 
 -module(unit).
 
