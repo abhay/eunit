@@ -24,5 +24,5 @@
 -include_lib("eunit/include/eunit_auto.hrl").
 %%-include("eunit_auto.hrl").
 -export([test/0]).
-test() -> eunit:run(?MODULE).
+test() -> eunit:test(?MODULE).
 -endif.
