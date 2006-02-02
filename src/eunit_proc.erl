@@ -65,6 +65,9 @@ start_task(Fun, St0) ->
 
 %% @spec (Fun::() -> term(), St::#procstate{}) -> ok
 
+%% @TODO track state of child process by receiving messages
+%% @TODO adjustable timeouts; no timeout if child itself is in waiting state
+
 insulator_process(Fun, St) ->
     process_flag(trap_exit, true),
     Child = spawn_link(fun () -> child_process(Fun, St) end),
@@ -74,9 +77,14 @@ insulator_process(Fun, St) ->
 	    task_reply(Reason, St),
 	    ok;
 	{'EXIT', Parent, _} ->
-	    exit(Child, kill),
-	    exit(parent_died)
+	    terminate_insulator(parent_died, Child)
+    after 5000 ->
+	    terminate_insulator(timed_out, Child)
     end.
+
+terminate_insulator(Reason, Child) ->
+    exit(Child, kill),
+    exit(Reason).
 
 %% @spec (() -> term(), #procstate{}) -> ok
 
