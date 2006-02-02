@@ -235,3 +235,17 @@ than 'fun_clause'.
 
 If a group is being browsed, no tests can be run, and all subgroups can
 only be further Browsed, not Entered.
+
+Some notes that were moved out from the code, for now:
+ - Tests are not executed in the same process as the caller, hence
+   there is at least one child process for running tests.
+ - The mailbox etc. of the caller should not be affected, so we use
+   a root process as insulator between the caller and the initial
+   test process.
+ - Since test processes are newly created and not known outside the
+   test framework, they do not get unexpected messages delivered to
+   their mailboxes.
+ - A test process either runs one or more subtests in strict order, or
+   runs a set of child processes in parallel. A test process should
+   not be trapping signals unless it is in a state where it is waiting
+   for subtests
