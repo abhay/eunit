@@ -5,13 +5,15 @@
 %%
 %% @author Richard Carlsson <richard@virtutech.com>
 %% @copyright 2005 Richard Carlsson
-%% @doc 
+%% @private
 
 -module(test).
 
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("eunit/include/eunit_test.hrl").
 
 succeed() ->
     ok.
@@ -125,8 +127,8 @@ nested_named_list_test_() ->
 higher_order_test_() ->
     {"Higher Order Tests",
      [
-      {"With Test",
-       {with,
+      {"Setup Test",
+       {setup,
 	fun () -> 4711 end,
 	fun (4711) -> ok end,
 	fun (X) ->
@@ -162,7 +164,7 @@ higher_order_test_() ->
      ]
     }.
 
-%% with/foreach usage examples
+%% setup/foreach usage examples
 
 file_setup(Name, Mode) ->
     {ok, FD} = file:open(Name, Mode),
@@ -180,12 +182,12 @@ file_test(FD, FileName, Text) ->
 msg(FD, FileName, Text) ->
     io:fwrite(FD, "~s: ~s\n", [FileName, Text]).
 
-with_test_() ->
-    File = "with_test.txt",
-    {with,
+setup_test_() ->
+    File = "setup_test.txt",
+    {setup,
      make_file_setup(File, [write]),
      fun file_cleanup/1,
-     abstract_file_test("hello!", "with_test")}.
+     abstract_file_test("hello!", "setup_test")}.
 
 abstract_file_test(Text, FileName) ->
     fun (FD) -> file_test(FD, FileName, Text) end.
@@ -212,4 +214,39 @@ foreach1_test_() ->
       {"foreach1_test_b.txt", more_abstract_file_test("zwei")},
       {"foreach1_test_c.txt", more_abstract_file_test("drei")},
       {"foreach1_test_d.txt", more_abstract_file_test("vier")}
+     ]}.
+
+order_test_() ->
+    {inparallel,
+     [{inorder,
+       [{"put 42",	?_test(undefined = put(foo, 42))},
+	{"get 42",	?_test(42 = get(foo))}
+       ]},
+      {inorder,
+       [{"put 17",	?_test(undefined = put(foo, 17))},
+	{"get 17",	?_test(17 = get(foo))}
+       ]},
+      {inorder,
+       [{"put 4711",	?_test(undefined = put(foo, 4711))},
+	{"fail", ?_test(exit(foo))},
+	{"get 4711",	?_test(4711 = get(foo))}
+       ]}
+     ]}.
+
+spawn_test_() ->
+    {"Level One",
+     inorder,
+     [{"put 42",	?_test(undefined = put(foo, 42))},
+      {"Level two",
+       spawn,
+       [{"put 17",	?_test(undefined = put(foo, 17))},
+	{"Level three",
+	 spawn,
+	 [{"put 4711",	?_test(undefined = put(foo, 4711))},
+	  {"fail", ?_test(exit(foo))},
+	  {"get 4711",	?_test(4711 = get(foo))}
+	 ]},
+	{"get 17",	?_test(17 = get(foo))}
+       ]},
+      {"get 42",	?_test(42 = get(foo))}
      ]}.

@@ -6,16 +6,19 @@
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
 %% The Initial Developer of the Original Code is Mickaël Rémond.''
 %%
 %%     $Id: eunit.hrl,v 1.1 2004/12/04 15:12:36 mremond Exp $
 %%
 
-%% =====================================================================
-%% New EUnit macros
+%% Since this file is normally included with include_lib, it must in its
+%% turn use include_lib to read any other header files, at least until
+%% the epp include_lib behaviour is fixed.
+-include_lib("eunit/include/eunit_old.hrl").
+%%-include("eunit_old.hrl").
 
 -define(_test(Expr), {?LINE, fun () -> (Expr), ok end}).
 -define(_test1(Str, Expr), {Str, ?_test(Expr)}).
@@ -40,28 +43,3 @@
 -define(_assertError(Term, Expr), ?_assertException(error, Term, Expr)).
 -define(_assertExit(Term, Expr), ?_assertException(exit, Term, Expr)).
 -define(_assertThrow(Term, Expr), ?_assertException(throw, Term, Expr)).
-
-
-%% =====================================================================
-%% Old EUnit macros
--define(log(Format,Args), eunit_lib:log(Format,Args,?FILE,?LINE)).
--define(error(Format,Args), eunit_lib:error(Format,Args,?FILE,?LINE)).
-
--define(match(ExpectedRes,Expr),
-        fun() ->
-		ActualRes = (catch (Expr)),
-		case ActualRes of
-		    ExpectedRes -> ok;
-		    _ -> exit(test_case_failed)
-		end
-	end()).
-
--define(match_inverse(NotExpectedRes,Expr),
-        fun() ->
-		ActualRes = (catch (Expr)),
-		case ActualRes of
-		    NotExpectedRes ->
-			exit(test_case_failed);
-		    _ -> ok
-		end
-	end()).

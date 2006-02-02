@@ -6,34 +6,314 @@
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
-%% The Initial Developer of the Original Code is Mickaël Rémond.''
+%% The Initial Developer of the Original Code is Richard Carlsson.''
 %%
-%%     $Id: eunit_lib.erl,v 1.1 2004/12/04 15:12:36 mremond Exp $
+%% $Id: eunit_lib.erl,v 1.1 2004/12/04 15:12:36 mremond Exp $
 %%
-%% @copyright 2004,2005 Mickaël Rémond
-%% @version 1.1, {@date} {@time}.
+%% @copyright 2004-2006 Mickaël Rémond, Richard Carlsson
 %% @author Mickaël Rémond <mickael.remond@process-one.net>
 %%   [http://www.process-one.net/]
+%% @author Richard Carlsson <richardc@csd.uu.se>
+%%   [http://www.csd.uu.se/~richardc/]
+%% @private
 %% @see eunit
-%% @see eunit_examples
-%% @doc Support library for eunit test case writting
-%% @end
+%% @see eunit_old
+%% @doc Utility functions for eunit
 
 -module(eunit_lib).
 
+-include("eunit.hrl").
+-include("eunit_internal.hrl").
+
+
+-export([dlist_next/1, uniq/1, fun_parent/1, is_string/1,
+	 browse_fun/1]).
+
+%% Old EUnit entry points.
 -export([log/4, error/4]).
 
+
+%% EUnit self-testing 
+-include("eunit_test.hrl").
+
+
+%% Old EUnit entry points
+
 log(Format, Args, LongFile, Line) ->
-    File = filename:basename(LongFile),
-    Tag = lists:concat([File, "(", Line, ")"]),
-    Data = io_lib:format(Format, Args),
-    error_logger:info_report({Tag, lists:flatten(Data)}).
-    
+    eunit_old:log(Format, Args, LongFile, Line).
+
 error(Format, Args, LongFile, Line) ->
-    File = filename:basename(LongFile),
-    Tag = lists:concat([File, "(", Line, ")"]),
-    Data = io_lib:format(Format, Args),
-    error_logger:info_report({Tag, lists:flatten(Data)}).
+    eunit_old:error(Format, Args, LongFile, Line).
+
+
+%% Type definitions for describing exceptions
+%%
+%% @type exception() = {exceptionClass(), Reason::term(), stackTrace()}
+%%
+%% @type exceptionClass() = error | exit | throw
+%%
+%% @type stackTrace() = [{moduleName(), functionName(),
+%%			  arity() | argList()}]
+%%
+%% @type moduleName() = atom()
+%% @type functionName() = atom()
+%% @type arity() = integer()
+%% @type mfa() = {moduleName(), functionName(), arity()}
+%% @type argList() = [term()]
+
+
+%% ---------------------------------------------------------------------
+%% Deep list iterator; accepts improper lists/sublists, and also accepts
+%% non-lists on the top level. The result is always presented as a list
+%% (which may be improper), which is either empty or otherwise has a
+%% non-list head element.
+
+dlist_next([X | Xs]) when is_list(X) ->
+    dlist_next(X, Xs);
+dlist_next([_|_] = Xs) ->
+    Xs;
+dlist_next([]) ->
+    [];
+dlist_next(X) ->
+    [X].
+
+%% the first two clauses avoid pushing empty lists on the stack
+dlist_next([X], Ys) when is_list(X) ->
+    dlist_next(X, Ys);
+dlist_next([X], Ys) ->
+    [X | Ys];
+dlist_next([X | Xs], Ys) when is_list(X) ->
+    dlist_next(X, [Xs | Ys]);
+dlist_next([X | Xs], Ys) ->
+    [X | [Xs | Ys]];
+dlist_next([], Xs) ->
+    dlist_next(Xs).
+
+
+-ifndef(NOTEST).
+dlist_test_() ->
+    {"deep list traversal",
+     [?_test1("non-list term -> singleton list",
+ 	      [any] = dlist_next(any)),
+      ?_test1("empty list -> empty list",
+ 	      [] = dlist_next([])),
+      ?_test1("singleton list -> singleton list",
+ 	      [any] = dlist_next([any])),
+      ?_test1("taking the head of a flat list",
+ 	      [1,2,3] = dlist_next([1,2,3])),
+      ?_test1("skipping an initial empty list",
+ 	      [1,2,3] = dlist_next([[],1,2,3])),
+      ?_test1("skipping nested initial empty lists",
+ 	      [1,2,3] = dlist_next([[[[]]],1,2,3])),
+      ?_test1("skipping a final empty list",
+ 	      [] = dlist_next([[]])),
+      ?_test1("skipping nested final empty lists",
+ 	      [] = dlist_next([[[[]]]])),
+      ?_test1("the first element is in a sublist",
+ 	      [1,2,3] = dlist_next([[1],2,3])),
+      ?_test1("traversing an empty list",
+ 	      [] = dlist_flatten([])),
+      ?_test1("traversing a flat list",
+ 	      [1,2,3] = dlist_flatten([1,2,3])),
+      ?_test1("traversing a deep list",
+ 	      [1,2,3] = dlist_flatten([[],[1,[2,[]],3],[]])),
+      ?_test1("traversing a deep but empty list",
+ 	      [] = dlist_flatten([[],[[[]]],[]]))
+     ]}.
+
+%% test support
+dlist_flatten(Xs) ->
+    case dlist_next(Xs) of
+	[X | Xs1] -> [X | dlist_flatten(Xs1)];
+	[] -> []
+    end.
+-endif.
+
+
+%% ---------------------------------------------------------------------
+%% Check for proper Unicode-stringness.
+
+is_string([C | Cs]) when is_integer(C), C >= 0, C =< 16#10ffff ->
+    is_string(Cs);
+is_string([_ | _]) ->
+    false;
+is_string([]) ->
+    true;
+is_string(_) ->
+    false.
+
+-ifndef(NOTEST).
+is_string_test_() ->
+    {"is_string",
+     [?_assert1("no non-lists",
+ 		not is_string($A)),
+      ?_assert1("no non-integer lists",
+ 		not is_string([true])),
+      ?_assert1("empty string",
+ 		is_string("")),
+      ?_assert1("ascii string",
+ 		is_string(lists:seq(0, 127))),
+      ?_assert1("latin-1 string",
+ 		is_string(lists:seq(0, 255))),
+      ?_assert1("unicode string",
+ 		is_string([0, $A, 16#10fffe, 16#10ffff])),
+      ?_assert1("not above unicode range",
+ 		not is_string([0, $A, 16#110000])),
+      ?_assert1("no negative codepoints",
+ 		not is_string([$A, -1, 0]))
+     ]}.
+-endif.
+
+
+%% ---------------------------------------------------------------------
+%% Get the name of the containing function for a fun. (This is encoded
+%% in the name of the generated function that implements the fun.)
+
+fun_parent(F) ->
+    {name, N} = erlang:fun_info(F, name),
+    case erlang:fun_info(F, type) of
+	{type, external} ->
+	    N;
+	{type, local} ->
+	    S = atom_to_list(N),
+	    list_to_atom(string:sub_string(S, 2, string:chr(S, $/) - 1))
+    end.
+
+-ifndef(NOTEST).
+fun_parent_test() ->
+    fun_parent_test = fun_parent(fun () -> ok end).
+-endif.
+
+
+%% ---------------------------------------------------------------------
+%% Ye olde uniq function
+
+uniq([X, X | Xs]) -> uniq([X | Xs]);    
+uniq([X | Xs]) -> [X | uniq(Xs)];
+uniq([]) -> [].
+
+-ifndef(NOTEST).
+uniq_test_() ->
+    {"uniq",
+     [?_assertError(function_clause, uniq(ok)),
+      ?_assertError(function_clause, uniq([1|2])),
+      ?_test([] = uniq([])),
+      ?_test([1,2,3] = uniq([1,2,3])),
+      ?_test([1,2,3] = uniq([1,2,2,3])),
+      ?_test([1,2,3,2,1] = uniq([1,2,2,3,2,2,1])),
+      ?_test([1,2,3] = uniq([1,1,1,2,2,2,3,3,3])),
+      ?_test(["1","2","3"] = uniq(["1","1","2","2","3","3"]))
+     ]}.
+-endif.
+
+
+%% ---------------------------------------------------------------------
+%% Apply arbitrary unary function F with dummy arguments "until it
+%% works". (F must be side effect free! It will be called repeatedly.)
+%% No exceptions will be thrown unless the function actually crashes for
+%% some other reason than being unable to match the argument.
+
+%% @spec (F::(any()) -> any()) -> {ok, Value::any(), Result::any()} | error
+
+browse_fun(F) ->
+    browse_fun(F, arg_values()).
+
+browse_fun(F, Next) ->
+    case Next() of
+	[V | Next1] ->
+	    case try_apply(F, V) of
+		{ok, Result} ->
+		    {ok, V, Result};
+		{error, function_clause} ->
+		    browse_fun(F, Next1);
+		{error, badarity} ->
+		    erlang:error({badarity, {F, 1}});
+		{error, {Class, Reason, Trace}} ->
+		    erlang:raise(Class, Reason, Trace)
+	    end;
+	[] ->
+	    error
+    end.
+
+%% Apply argument to function and report whether it succeeded (and with
+%% what return value), or failed due to bad arity or a simple top-level
+%% function_clause error, or if it crashed in some other way.
+
+%% @spec (F::(any()) -> any(), V::any()) -> 
+%%     {ok, Result::any()}
+%%   | {error, function_clause | badarity | eunit_test:exception()}
+
+try_apply(F, Arg) ->
+    case erlang:fun_info(F, arity) of
+	{arity, 1} ->
+	    {module, M} = erlang:fun_info(F, module),
+	    {name, N} = erlang:fun_info(F, name),
+	    try_apply(F, Arg, M, N);
+	_ ->
+	    {error, badarity}
+    end.
+
+try_apply(F, Arg, M, N) ->
+    try F(Arg) of
+	X -> {ok, X}
+    catch
+	error:function_clause ->
+	    case erlang:get_stacktrace() of
+		[{M, N, _Args} | _] ->
+		    {error, function_clause};
+		Trace ->
+		    {error, {error, function_clause, Trace}}
+	    end;
+	  Class:Reason ->
+	    {error, {Class, Reason, erlang:get_stacktrace()}}
+    end.
+
+%% test value producers for function browsing
+
+arg_values() ->
+    Vs = [undefined, ok, true, false, 0, 1],
+    fun () -> arg_values(Vs) end.
+
+arg_values([V | Vs]) ->
+    [V | fun () -> arg_values(Vs) end];
+arg_values(_) ->
+    (arg_tuples())().
+
+arg_tuples() ->
+    fun () -> arg_tuples(0) end.
+
+arg_tuples(N) when N >= 0, N =< 12 ->
+    [erlang:make_tuple(N, undefined) | fun () -> arg_tuples(N + 1) end];
+arg_tuples(_) ->
+    (arg_lists())().
+
+arg_lists() ->
+    fun () -> arg_lists(0) end.
+
+arg_lists(N) when N >= 0, N =< 12 ->
+    [lists:duplicate(N, undefined) | fun () -> arg_lists(N + 1) end];
+arg_lists(_) ->
+    [].
+
+-ifndef(NOTEST).
+browse_fun_test_() ->
+    {"browsing funs",
+     [?_assertError({badarity, {_, 1}}, browse_fun(fun () -> ok end)),
+      ?_assertError({badarity, {_, 1}}, browse_fun(fun (_,_) -> ok end)),
+      ?_test({ok, _, 17} = browse_fun(fun (_) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun (undefined) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun (ok) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun (true) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ({}) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ({_}) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ({_,_}) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ({_,_,_}) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ([]) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ([_]) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ([_,_]) -> 17 end)),
+      ?_test({ok, _, 17} = browse_fun(fun ([_,_,_]) -> 17 end))
+     ]}.
+-endif.
