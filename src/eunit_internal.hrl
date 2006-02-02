@@ -13,6 +13,7 @@
 
 -define(DEFAULT_TEST_SUFFIX, "_test").
 -define(DEFAULT_GENERATOR_SUFFIX, "_test_").
+-define(DEFAULT_INSULATOR_TIMEOUT, 5000).
 
 
 %% ---------------------------------------------------------------------

@@ -78,7 +78,7 @@ insulator_process(Fun, St) ->
 	    ok;
 	{'EXIT', Parent, _} ->
 	    terminate_insulator(parent_died, Child)
-    after 5000 ->
+    after ?DEFAULT_INSULATOR_TIMEOUT ->
 	    terminate_insulator(timed_out, Child)
     end.
 
