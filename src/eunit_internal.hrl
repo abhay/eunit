@@ -3,7 +3,7 @@
 %%
 %% $Id:$ 
 %%
-%% @author Richard Carlsson <richard@csd.uu.se>
+%% @author Richard Carlsson <richardc@csd.uu.se>
 %% @copyright 2006 Richard Carlsson
 %% @doc 
 
