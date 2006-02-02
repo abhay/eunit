@@ -18,9 +18,11 @@
 %% Copyright (C) 2006 Richard Carlsson
 
 -ifndef(NOTEST).
-%% Since this file is normally included with include_lib, it must
-%% in its turn use include_lib to read any other header files.
+%% Since this file is normally included with include_lib, it must in its
+%% turn use include_lib to read any other header files, at least until
+%% the epp include_lib behaviour is fixed.
 -include_lib("eunit/include/eunit_auto.hrl").
+%%-include("eunit_auto.hrl").
 -export([test/0]).
 test() -> eunit:run(?MODULE).
 -endif.
