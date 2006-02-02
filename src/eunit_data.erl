@@ -26,7 +26,8 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([iter_init/1, iter_next/1, iter_prev/1]).
+-export([iter_init/1, iter_next/1, iter_prev/1,
+	 enter_context/2, browse_context/2]).
 
 -import(lists, [foldr/3]).
 
@@ -275,6 +276,58 @@ get_module_tests(M) ->
 	error:undef -> 
 	    throw({module_not_found, M})
     end.
+
+%% ---------------------------------------------------------------------
+%% Entering a setup-context, with guaranteed cleanup.
+
+%% @spec (Tests::#context{}, Callback::(any()) -> any()) -> any()
+%% @throws setup_failed | instantiation_failed | cleanup_failed
+
+enter_context(#context{setup = S, cleanup = C, instantiate = I}, F) ->
+    enter_context(S, C, I, F).
+
+enter_context(Setup, Cleanup, Instantiate, Callback) ->
+    try Setup() of
+	R ->
+	    try Instantiate(R) of
+		T ->
+		    try Callback(T)  %% call back to client code
+		    after
+			%% Always run cleanup; client may be an idiot
+			try Cleanup(R)
+			catch
+			    _:_ -> throw(cleanup_failed)
+			end
+		    end
+	    catch
+		_:_ ->
+		    throw(instantiation_failed)
+	    end
+    catch
+	_:_ ->
+	    throw(setup_failed)
+    end.
+
+%% Instantiates a context with dummy values to make browsing possible
+%% @throws instantiation_failed
+
+browse_context(#context{instantiate = I}, F) ->
+    %% Browse: dummy setup/cleanup and a wrapper for the instantiator
+    S = fun () -> ok end,
+    C = fun (_) -> ok end,
+    I1 = fun (_) ->
+		try eunit_lib:browse_fun(I) of
+		    {ok, _, T} ->
+			T;
+		    error ->
+			throw(instantiation_failed)
+		catch
+		    _:_ ->
+			throw(instantiation_failed)
+		end
+	 end,
+    enter_context(S, C, I1, F).
+
 
 %% ---------------------------------------------------------------------
 

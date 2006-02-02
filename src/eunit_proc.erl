@@ -254,7 +254,7 @@ set_group_order(#group{order = Order}, St) ->
 
 handle_context(T, St) ->
     try
-	enter_context(T, fun (T) -> group(T, St) end)
+	eunit_data:enter_context(T, fun (T) -> group(T, St) end)
     catch
 	R = setup_failed ->
 	    abort_task(R);
@@ -264,56 +264,8 @@ handle_context(T, St) ->
 	    abort_task(R)
     end.
 
-%% @spec (#test{}) -> {ok, Value} | {error, exception()}
+%% @spec (#test{}) -> {ok, Value} | {error, eunit_lib:exception()}
 %% @throws eunit_test:wrapperError()
 
 run_test(#test{f = F}) ->
     eunit_test:run_testfun(F).
-
-
-%% @throws instantiation_failed
-
-browse_context(#context{instantiate = I}, F) ->
-    %% Browse: dummy setup/cleanup and a wrapper for the instantiator
-    S = fun () -> ok end,
-    C = fun (_) -> ok end,
-    I1 = fun (_) ->
-		try eunit_lib:browse_fun(I) of
-		    {ok, _, T} ->
-			T;
-		    error ->
-			throw(instantiation_failed)
-		catch
-		    _:_ ->
-			throw(instantiation_failed)
-		end
-	 end,
-    enter_context(S, C, I1, F).
-
-%% @spec (Tests::#context{}, Callback::(any()) -> any()) -> any()
-%% @throws setup_failed | instantiation_failed | cleanup_failed
-
-enter_context(#context{setup = S, cleanup = C, instantiate = I}, F) ->
-    enter_context(S, C, I, F).
-
-enter_context(Setup, Cleanup, Instantiate, Callback) ->
-    try Setup() of
-	R ->
-	    try Instantiate(R) of
-		T ->
-		    try Callback(T)  %% call back to client code
-		    after
-			%% Always run cleanup; client may be an idiot
-			try Cleanup(R)
-			catch
-			    _:_ -> throw(cleanup_failed)
-			end
-		    end
-	    catch
-		_:_ ->
-		    throw(instantiation_failed)
-	    end
-    catch
-	_:_ ->
-	    throw(setup_failed)
-    end.
