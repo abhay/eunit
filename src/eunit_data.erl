@@ -26,7 +26,7 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([iter_init/1, iter_next/1, iter_prev/1,
+-export([list/1, iter_init/1, iter_next/1, iter_prev/1,
 	 enter_context/2, browse_context/2]).
 
 -import(lists, [foldr/3]).
@@ -65,7 +65,9 @@
 %%
 %% Note that `{string(), ...}' is equivalent to `{string(), {...}}' if
 %% the tuple contains more than two elements.
-
+%%
+%% @type moduleName() = eunit_lib:moduleName()
+%% @type functionName() = eunit_lib:functionName()
 
 %% ---------------------------------------------------------------------
 %% Abstract test set iterator
@@ -82,9 +84,9 @@ iter_init(Tests) ->
     #iter{tests = Tests}.
 
 %% @throws {bad_test, term()}
-%%       | {generator_failed, eunit_lib:exception()}
+%%       | {generator_failed, exception()}
 %%       | {no_such_function, eunit_lib:mfa()}
-%%       | {module_not_found, eunit_lib:moduleName()}
+%%       | {module_not_found, moduleName()}
 
 %% @spec (testIterator()) -> none | {testItem(), testIterator()}
 
@@ -119,7 +121,7 @@ iter_prev(#iter{prev = [T | Ts]} = I) ->
 %% @throws {bad_test, term()}
 %%       | {generator_failed, eunit_lib:exception()}
 %%       | {no_such_function, eunit_lib:mfa()}
-%%       | {module_not_found, eunit_lib:moduleName()}
+%%       | {module_not_found, moduleName()}
 
 next(Tests) ->
     case eunit_lib:dlist_next(Tests) of
@@ -247,7 +249,7 @@ join_properties(X, undefined) -> X.
 %% ---------------------------------------------------------------------
 %% Extracting test funs from a module
 
-%% @throws {module_not_found, eunit_lib:moduleName()}
+%% @throws {module_not_found, moduleName()}
 
 get_module_tests(M) ->
     TestSuffix = ?DEFAULT_TEST_SUFFIX,
@@ -331,57 +333,62 @@ browse_context(#context{instantiate = I}, F) ->
 
 %% ---------------------------------------------------------------------
 
-%% FIXME: build representation of test sequence
+%% Returns a list of test info using a similar format to tests() above:
+%%
+%% @type testInfoList() = [testInfo()]
+%% @type testInfo() = {moduleName(), functionName()}
+%%		    | {moduleName(), functionName(), lineNumber()}
+%%		    | {description(), testInfo()}
+%%		    | {description(), testInfoList()}
+%% @type lineNumber() = integer().  Line numbers are always >= 1.
 
-%% list(T) ->
-%%     St = #procstate{},
-%%     list_loop_init(T, Super, Parent, St),
-%%     ok.
+list(T) ->
+    list_loop(iter_init(T)).
 
-%% list_loop_init(T, Super, Parent, St) ->
-%%     list_loop(iter_init(T), Super, Parent, St).
+list_loop(I) ->
+    try iter_next(I) of
+ 	{T, I1} ->
+ 	    case T of
+		#test{} ->
+		    Name = case T#test.line of
+			       0 -> {T#test.module, T#test.name};
+			       Line -> {T#test.module, T#test.name, Line}
+			   end,
+		    [case T#test.desc of
+			 undefined ->
+			     Name;
+			 Desc ->
+			     {Desc, Name}
+		     end
+		     | list_loop(I1)];
+		#group{} ->
+		    case T#test.desc of
+			undefined ->
+			    list(T#group.tests) ++ list_loop(I1);
+			Desc ->
+			    [{Desc, list(T#group.tests)}
+			     | list_loop(I1)]
+		    end;
+		#context{} ->
+		    list_context(T) ++ list_loop(I1)
+	    end;
+ 	none ->
+ 	    []
+    catch
+ 	R = {bad_test, _} ->
+	    {error, R};
+	R = {no_such_function, _} ->
+	    {error, R};
+	R = {module_not_found, _} ->
+	    {error, R};
+	R = {generator_failed, _} ->
+ 	    {error, R}
+    end.
 
-%% list_loop(_I, _Super, _Parent, St = #procstate{abort = true}) ->
-%%     St;
-%% list_loop(I, Super, Parent, St) ->
-%%     try iter_next(I) of
-%% 	{T, I1} ->
-%% 	    St1 = case T of
-%% 		      #test{} ->
-%% 			  list_test(T, Super, St);
-%% 		      #group{} ->
-%% 			  list_group(T, Super, Parent, St);
-%% 		      #context{} ->
-%% 			  list_context(T, Super, Parent, St) 
-%% 		  end,
-%% 	    loop(I1, Super, Parent, St1);
-%% 	none ->
-%% 	    St
-%%     catch
-%% 	{bad_test, Bad} ->
-%% 	    abort("bad test descriptor", "~p", [Bad], Super, St);
-%% 	{no_such_function, {M,F,A}} ->
-%% 	    abort(io_lib:format("no such function: ~w:~w/~w", [M,F,A]),
-%% 		  "", [], Super, St);
-%% 	{module_not_found, M} ->
-%% 	    abort("test module not found", "~p", [M], Super, St);
-%% 	{generator_failed, Exception} ->
-%% 	    abort("test generator failed", "~p", [Exception], Super, St)
-%%     end.
-
-%% list_test(T, Super, St) ->
-%%     St.
-
-%% list_group(T, St) ->
-%%     T1 = T#group.tests,
-%%     loop_init(T1, Super, Parent, St).
-
-%% list_context(T, Super, Parent, St) ->
-%%     try
-%% 	browse_context(T, fun (T) ->
-%% 				  list_loop_init(T, Super, Parent, St)
-%% 			  end)
-%%     catch
-%% 	instantiation_failed ->
-%% 	    abort("instantiation of subtests failed", "", [], St)
-%%     end.
+list_context(T) ->
+    try
+ 	browse_context(T, fun (T) -> list(T) end)
+    catch
+ 	R = instantiation_failed ->
+ 	    {error, R}
+    end.

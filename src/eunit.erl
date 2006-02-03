@@ -27,7 +27,7 @@
 -include("eunit_internal.hrl").
 
 
--export([test/1, test/2]).
+-export([test/1, test/2, list/1]).
 -export([testp/1]). %% for development testing, not official
 
 %% Old EUnit entry point.
@@ -57,6 +57,9 @@ erlfilename(Erlfile) ->
 
 
 %% New EUnit entry points
+
+list(T) ->
+    eunit_data:list(T).
 
 test(T) ->
     test(T, [{order, true}]).
