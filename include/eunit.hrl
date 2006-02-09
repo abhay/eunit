@@ -30,6 +30,9 @@
 	       end)).
 -define(_assert1(Str, BoolExpr), {Str, ?_assert(BoolExpr)}).
 
+-define(_assertNot(BoolExpr), ?_assert(not (BoolExpr))).
+-define(_assertNot1(Str, BoolExpr), {Str, ?_assertNot(BoolExpr)}).
+
 %% Class and Term may be patterns here
 -define(_assertException(Class, Term, Expr),
 	?_test(try (Expr) of

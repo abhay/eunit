@@ -74,6 +74,14 @@ macro_test_() ->
  		 {error,{throw,assertion_failed,_}} = run_testfun(F)
  	     end),
       ?_test(begin
+ 		 {?LINE, F} = ?_assertNot(false),
+ 		 {ok, ok} = run_testfun(F)
+ 	     end),
+      ?_test(begin
+ 		 {?LINE, F} = ?_assertNot(true),
+ 		 {error,{throw,assertion_failed,_}} = run_testfun(F)
+ 	     end),
+      ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarith,
  						erlang:error(badarith)),
  		 {ok, ok} = run_testfun(F)
