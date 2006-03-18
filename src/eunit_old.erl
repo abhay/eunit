@@ -16,8 +16,8 @@
 %% @copyright 2004-2005 Mickaël Rémond
 %% @author Mickaël Rémond <mickael.remond@process-one.net>
 %%   [http://www.process-one.net/]
-%% @author Richard Carlsson <richardc@csd.uu.se>
-%%   [http://www.csd.uu.se/~richardc/]
+%% @author Richard Carlsson <richardc@it.uu.se>
+%%   [http://user.it.uu.se/~richardc/]
 %% @private
 %% @see eunit
 %% @doc This module contains legacy code from EUnit version 1.1.

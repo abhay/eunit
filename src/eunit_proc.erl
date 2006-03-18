@@ -15,7 +15,7 @@
 %%
 %% $Id:$ 
 %%
-%% @author Richard Carlsson <richardc@csd.uu.se>
+%% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
 %% @private
 %% @see eunit
@@ -124,7 +124,7 @@ wait_for_tasks(PidSet, St) ->
  			    exit({child_died, Pid, Reason});
 		       true ->
 			    %% (if Pid is not in the set, the below has
-			    %% no effect; however, that cannot happen)
+			    %% no effect; anyway, that cannot happen)
  			    Rest = sets:del_element(Pid, PidSet),
  			    wait_for_tasks(Rest, St)
 		    end

@@ -16,8 +16,8 @@
 %% @copyright 2004-2006 Mickaël Rémond, Richard Carlsson
 %% @author Mickaël Rémond <mickael.remond@process-one.net>
 %%   [http://www.process-one.net/]
-%% @author Richard Carlsson <richardc@csd.uu.se>
-%%   [http://www.csd.uu.se/~richardc/]
+%% @author Richard Carlsson <richardc@it.uu.se>
+%%   [http://user.it.uu.se/~richardc/]
 %% @version {@vsn}, {@date} {@time}
 %% @doc This module is the normal EUnit user interface.
 
@@ -30,10 +30,10 @@
 -export([test/1, test/2, list/1]).
 -export([testp/1]). %% for development testing, not official
 
-%% Old EUnit entry point.
+%% Old EUnit entry point. Don't use.
 -export([run/2]).
 
-%% Aaegis support
+%% Aaegis support. (Old entry point - don't use unless you must.)
 -export([erlfilename/1]).
 
 %% Self-testing
@@ -47,7 +47,7 @@ full_test_() ->
 -endif.
 
 
-%% Old EUnit entry points
+%% Old EUnit entry points. Avoid!
 
 run(Modules, Pattern) ->
     eunit_old:run(Modules, Pattern).

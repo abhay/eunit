@@ -15,7 +15,7 @@
 %%
 %% $Id:$ 
 %%
-%% @author Richard Carlsson <richardc@csd.uu.se>
+%% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
 %% @private
 %% @see eunit

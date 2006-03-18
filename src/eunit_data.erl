@@ -15,7 +15,7 @@
 %%
 %% $Id:$ 
 %%
-%% @author Richard Carlsson <richardc@csd.uu.se>
+%% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
 %% @private
 %% @see eunit
@@ -88,7 +88,8 @@ iter_init(Tests) ->
 %%       | {no_such_function, eunit_lib:mfa()}
 %%       | {module_not_found, moduleName()}
 
-%% @spec (testIterator()) -> none | {testItem(), testIterator()}
+%% @spec (testIterator(), Handler) -> none | {testItem(), testIterator()}
+%%    Handler = (term()) -> term()
 
 iter_next(I, H) ->
     iter_do(fun iter_next/1, I, H).
@@ -119,7 +120,8 @@ iter_next(I = #iter{next = [T | Ts]}) ->
 	       prev = [T | I#iter.prev]}}.
 
 
-%% @spec (testIterator()) -> none | {testItem(), testIterator()}
+%% @spec (testIterator(), Handler) -> none | {testItem(), testIterator()}
+%%    Handler = (term()) -> term()
 
 iter_prev(I, H) ->
     iter_do(fun iter_prev/1, I, H).

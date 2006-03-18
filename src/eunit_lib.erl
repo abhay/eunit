@@ -16,8 +16,8 @@
 %% @copyright 2004-2006 Mickaël Rémond, Richard Carlsson
 %% @author Mickaël Rémond <mickael.remond@process-one.net>
 %%   [http://www.process-one.net/]
-%% @author Richard Carlsson <richardc@csd.uu.se>
-%%   [http://www.csd.uu.se/~richardc/]
+%% @author Richard Carlsson <richardc@it.uu.se>
+%%   [http://user.it.uu.se/~richardc/]
 %% @private
 %% @see eunit
 %% @see eunit_old
