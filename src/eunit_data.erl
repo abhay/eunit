@@ -413,13 +413,13 @@ list_loop(I, N, Ns) ->
 			   end,
 		    [{item, Id, desc_string(T#test.desc), Name}
 		     | list_loop(I1, N + 1, Ns)];
-		#group{context = #context{}} ->
+		#group{context = Context} ->
+		    F = case Context of
+			    #context{} -> fun list_context/3;
+			    _ -> fun list/3
+			end,
 		    [{group, Id, desc_string(T#group.desc),
-		      list_context(T#group.tests, 1, [N | Ns])}
-		     | list_loop(I1, N + 1, Ns)];
-		#group{} ->
-		    [{group, Id, desc_string(T#group.desc),
-		      list(T#group.tests, 1, [N | Ns])}
+		      F(T#group.tests, 1, [N | Ns])}
 		     | list_loop(I1, N + 1, Ns)]
 	    end;
  	none ->
