@@ -34,11 +34,11 @@
 	       line = 0
 	      }).
 
--record(context, {setup = undefined,
-		  cleanup = undefined,
-		  instantiate = undefined}).
-
 -record(group, {desc = undefined,	% optional description
-		spawn = undefined,	% run group in new process
 		order = undefined,	% run in order or in parallel
+		context = undefined,	% setup-context
+		spawn = undefined,	% run group in new process
 		tests = undefined}).
+
+-record(context, {setup = undefined,
+		  cleanup = undefined}).

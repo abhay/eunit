@@ -27,7 +27,7 @@
 -include("eunit_internal.hrl").
 
 -export([list/1, iter_init/1, iter_next/2, iter_prev/2,
-	 enter_context/2, browse_context/2]).
+	 enter_context/3, browse_context/2]).
 
 -import(lists, [foldr/3]).
 
@@ -137,7 +137,7 @@ iter_prev(#iter{prev = [T | Ts]} = I) ->
 %% Concrete test set representation iterator
 
 %% @spec (tests()) -> none | {testItem(), tests()}
-%% @type testItem() = #test{} | #group{} | #context{}
+%% @type testItem() = #test{} | #group{}
 %% 
 %% @throws {bad_test, term()}
 %%       | {generator_failed, eunit_lib:exception()}
@@ -157,35 +157,44 @@ next(Tests) ->
 	    none
     end.
 
-parse({setup, S, C, I}) ->
-    #context{setup = S, cleanup = C, instantiate = I};
-parse({foreach, S, C, Fs}) when is_list(Fs) ->
+parse({foreach, S, C, Fs} = T)
+  when is_function(S), is_function(C), is_list(Fs) ->
+    check_arity(S, 0, T),
+    check_arity(C, 1, T),
     case eunit_lib:dlist_next(Fs) of
-	[F | Fs1] ->
+	[F | Fs1] when is_function(F) ->
+	    check_arity(F, 1, T),
 	    [{setup, S, C, F} | {foreach, S, C, Fs1}];
 	[] ->
-	    []
+	    [];
+	_ ->
+	    throw({bad_test, T})
     end;
-parse({foreach1, S1, C1, Ps}) when is_list(Ps) ->
+parse({foreach1, S1, C1, Ps} = T) 
+  when is_function(S1), is_function(C1), is_list(Ps) ->
+    check_arity(S1, 1, T),
+    check_arity(C1, 2, T),
     case eunit_lib:dlist_next(Ps) of
 	[P | Ps1] ->
 	    case P of
-		{A, F1} ->
+		{A, F1} when is_function(F1) ->
+		    check_arity(F1, 2, T),
 		    S = fun () -> S1(A) end,
 		    C = fun (X) -> C1(A, X) end,
 		    F = fun (X) -> F1(A, X) end,
 		    [{setup, S, C, F} | {foreach1, S1, C1, Ps1}];
 		_ ->
-		    throw({bad_test, P})
+		    throw({bad_test, T})
 	    end;
 	[] ->
 	    []
     end;
-parse({generator, F}) when is_function(F) ->
+parse({generator, F} = T) when is_function(F) ->
+    check_arity(F, 0, T),
     %% use run_testfun/1 to handle wrapper exceptions
     case eunit_test:run_testfun(F) of
-	{ok, T} ->
-	    parse(T);
+	{ok, T1} ->
+	    parse(T1);
 	{error, {Class, Reason, Trace}} ->
 	    throw({generator_failed, {Class, Reason, Trace}})
     end;
@@ -197,12 +206,19 @@ parse({inparallel, T}) ->
     group(#group{tests = T, order = false});
 parse({spawn, T}) ->
     group(#group{tests = T, spawn = true});
-parse({S, T} = T0) when is_list(S) ->
+parse({setup, S, C, I} = T)
+  when is_function(S), is_function(C), is_function(I) ->
+    check_arity(S, 0, T),
+    check_arity(C, 1, T),
+    check_arity(I, 1, T),
+    %% note that the test is nonstandard - it needs instantiating
+    group(#group{tests = I, context = #context{setup = S, cleanup = C}});
+parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->
-	    group(#group{tests = T, desc = S});
+	    group(#group{tests = T1, desc = S});
 	false ->
-	    throw({bad_test, T0})
+	    throw({bad_test, T})
     end;
 parse(T) when is_tuple(T), size(T) > 2, is_list(element(1, T)) ->
     [S | Es] = tuple_to_list(T),
@@ -220,37 +236,49 @@ parse_simple(F) ->
     parse_function(F).
 
 parse_function(F) when is_function(F) ->
-    case erlang:fun_info(F, arity) of
-	{arity, 0} ->
-	    {module, M} = erlang:fun_info(F, module),
-	    #test{f = F, module = M, name = eunit_lib:fun_parent(F)};
-	_ ->
-	    throw({bad_test, F})
-    end;
+    check_arity(F, 0, F),
+    {module, M} = erlang:fun_info(F, module),
+    #test{f = F, module = M, name = eunit_lib:fun_parent(F)};
 parse_function({M,F}) when is_atom(M), is_atom(F) ->
     #test{f = eunit_test:function_wrapper(M, F), module = M, name = F};
 parse_function(F) ->
     throw({bad_test, F}).
 
+check_arity(F, N, T) ->
+    case erlang:fun_info(F, arity) of
+	{arity, N} ->
+	    ok;
+	_ ->
+	    throw({bad_test, T})
+    end.
+
 %% This does some look-ahead and folds nested groups and tests where
 %% possible. E.g., {String, Test} -> Test#test{desc = String}.
 
-group(#group{tests = T0, desc = Desc, order = Order, spawn = Spawn} = G)
-->
+group(#group{context = #context{}} = G) ->
+    %% leave as it is - the test body is not suitable for lookahead
+    G;
+group(#group{tests = T0, desc = Desc, order = Order, context = Context,
+	     spawn = Spawn} = G) ->
     {T1, Ts} = lookahead(T0),
     {T2, _} = lookahead(Ts),
     case T1 of
-	#test{desc = undefined} when T2 == none, Spawn /= true ->
-	    %% a single test within a non-spawn group: put the
+	#test{desc = undefined}
+	when T2 == none, Spawn /= true, Context == undefined ->
+	    %% a single test within a non-spawn/setup group: put the
 	    %% description directly on the test; no order.
 	    T1#test{desc = Desc};
-	#group{desc = Desc1, order = Order1, spawn = Spawn1}
-	when ((Desc == undefined) or (Desc1 == undefined)),
+	#group{desc = Desc1, order = Order1, context = Context1,
+	       spawn = Spawn1}
+	when T2 == none,
+	     ((Desc == undefined) or (Desc1 == undefined)),
 	     ((Order == undefined) or (Order1 == undefined)),
+	     ((Context == undefined) or (Context1 == undefined)),
 	     ((Spawn == undefined) or (Spawn1 == undefined)) ->
 	    %% two nested groups with non-conflicting properties
 	    T1#group{desc = join_properties(Desc, Desc1),
 		     order = join_properties(Order, Order1),
+		     context = join_properties(Context, Context1),
 		     spawn = join_properties(Spawn, Spawn1)};
 	_ ->
 	    %% leave as it is and discard the lookahead
@@ -306,7 +334,7 @@ get_module_tests(M) ->
 %% @spec (Tests::#context{}, Callback::(any()) -> any()) -> any()
 %% @throws setup_failed | instantiation_failed | cleanup_failed
 
-enter_context(#context{setup = S, cleanup = C, instantiate = I}, F) ->
+enter_context(#context{setup = S, cleanup = C}, I, F) ->
     enter_context(S, C, I, F).
 
 enter_context(Setup, Cleanup, Instantiate, Callback) ->
@@ -334,7 +362,7 @@ enter_context(Setup, Cleanup, Instantiate, Callback) ->
 %% Instantiates a context with dummy values to make browsing possible
 %% @throws instantiation_failed
 
-browse_context(#context{instantiate = I}, F) ->
+browse_context(I, F) ->
     %% Browse: dummy setup/cleanup and a wrapper for the instantiator
     S = fun () -> ok end,
     C = fun (_) -> ok end,
@@ -356,7 +384,8 @@ browse_context(#context{instantiate = I}, F) ->
 
 %% Returns a list of test info using a similar format to tests() above:
 %%
-%% @type testInfoList() = [testInfo()]
+%% @type testInfoList() = [{Id, testInfo()}]
+%%   Id = [integer()]
 %% @type testInfo() = {moduleName(), functionName()}
 %%		    | {moduleName(), functionName(), lineNumber()}
 %%		    | {description(), testInfo()}
@@ -364,42 +393,48 @@ browse_context(#context{instantiate = I}, F) ->
 %% @type lineNumber() = integer().  Line numbers are always >= 1.
 
 list(T) ->
-    list_loop(iter_init(T)).
+    try list(T, 1, [])
+    catch
+	{error, R} -> {error, R}
+    end.
 
-list_loop(I) ->
-    case iter_next(I, fun (R) -> {error, R} end) of
+list(T, N, Ns) ->
+    list_loop(iter_init(T), N, Ns).
+
+list_loop(I, N, Ns) ->
+    case iter_next(I, fun (R) -> throw({error, R}) end) of
  	{T, I1} ->
+	    Id = id(N, Ns),
  	    case T of
 		#test{} ->
 		    Name = case T#test.line of
 			       0 -> {T#test.module, T#test.name};
 			       Line -> {T#test.module, T#test.name, Line}
 			   end,
-		    [case T#test.desc of
-			 undefined ->
-			     Name;
-			 Desc ->
-			     {Desc, Name}
-		     end
-		     | list_loop(I1)];
+		    [{item, Id, desc_string(T#test.desc), Name}
+		     | list_loop(I1, N + 1, Ns)];
+		#group{context = #context{}} ->
+		    [{group, Id, desc_string(T#group.desc),
+		      list_context(T#group.tests, 1, [N | Ns])}
+		     | list_loop(I1, N + 1, Ns)];
 		#group{} ->
-		    case T#test.desc of
-			undefined ->
-			    list(T#group.tests) ++ list_loop(I1);
-			Desc ->
-			    [{Desc, list(T#group.tests)}
-			     | list_loop(I1)]
-		    end;
-		#context{} ->
-		    list_context(T) ++ list_loop(I1)
+		    [{group, Id, desc_string(T#group.desc),
+		      list(T#group.tests, 1, [N | Ns])}
+		     | list_loop(I1, N + 1, Ns)]
 	    end;
  	none ->
  	    []
     end.
 
-list_context(T) ->
+desc_string(undefined) -> "";
+desc_string(S) -> S.
+
+id(N, Ns) ->
+    lists:reverse(Ns, [N]).
+
+list_context(T, N, Ns) ->
     try
- 	browse_context(T, fun (T) -> list(T) end)
+ 	browse_context(T, fun (T) -> list(T, N, Ns) end)
     catch
  	R = instantiation_failed ->
  	    {error, R}

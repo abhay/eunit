@@ -143,40 +143,40 @@ abort_task(Reason) ->
 
 spawn_tester(T, St0) ->
     Fun = fun (St) ->
-		  fun () -> group(T, St) end
+		  fun () -> tests(T, St) end
 	  end,
     start_task(Fun, St0).
 
 %% @throws abortException()
 
-group(T, St) ->
+tests(T, St) ->
     I = eunit_data:iter_init(T),
     case St#procstate.order of
-	true -> group_inorder(I, St);
-	false -> group_inparallel(I, St)
+	true -> tests_inorder(I, St);
+	false -> tests_inparallel(I, St)
     end.
 
 %% @throws abortException()
 
-group_inorder(I, St) ->
-    case get_next_test(I) of
+tests_inorder(I, St) ->
+    case get_next_item(I) of
 	{T, I1} ->
 	    handle_item(T, St),
-	    group_inorder(I1, St);
+	    tests_inorder(I1, St);
 	none ->
 	    ok
     end.
 
 %% @throws abortException()
 
-group_inparallel(I, St) ->
-    group_inparallel(I, St, sets:new()).
+tests_inparallel(I, St) ->
+    tests_inparallel(I, St, sets:new()).
 
-group_inparallel(I, St, Children) ->
-    case get_next_test(I) of
+tests_inparallel(I, St, Children) ->
+    case get_next_item(I) of
 	{T, I1} ->
 	    Child = spawn_item(T, St),
-	    group_inparallel(I1, St, sets:add_element(Child, Children));
+	    tests_inparallel(I1, St, sets:add_element(Child, Children));
 	none ->
 	    wait_for_tasks(Children, St),
 	    ok
@@ -190,7 +190,7 @@ spawn_item(T, St0) ->
 	  end,
     start_task(Fun, St0).
 
-get_next_test(I) ->
+get_next_item(I) ->
     eunit_data:iter_next(I, fun abort_task/1).
 
 %% @throws abortException()
@@ -198,8 +198,7 @@ get_next_test(I) ->
 handle_item(T, St) ->
     case T of
 	#test{} -> handle_test(T, St);
-	#group{} -> handle_group(T, St);
-	#context{} -> handle_context(T, St) 
+	#group{} -> handle_group(T, St)
     end.
 
 handle_test(T, St) ->
@@ -223,15 +222,8 @@ handle_test(T, St) ->
 
 handle_group(T, St0) ->
     St = set_group_order(T, St0),
-    T1 = T#group.tests,
     message_super({group, enter, T#group.desc}, St),
-    case T#group.spawn of
-	true ->
-	    Child = spawn_tester(T1, St),
-	    wait_for_task(Child, St);
-	_ ->
-	    group(T1, St)
-    end,
+    run_group(T, St),
     message_super({group, leave, T#group.desc}, St),
     ok.
 
@@ -240,17 +232,36 @@ set_group_order(#group{order = undefined}, St) ->
 set_group_order(#group{order = Order}, St) ->
     St#procstate{order = Order}.
 
+run_group(T, St) ->
+    case T#group.spawn of
+	true ->
+	    Child = spawn_group(T, St),
+	    wait_for_task(Child, St);
+	_ ->
+	    subtests(T, fun (T) -> tests(T, St) end)
+    end.
+
+spawn_group(T, St0) ->
+    Fun = fun (St) ->
+		  fun () ->
+			  subtests(T, fun (T) -> tests(T, St) end)
+		  end
+	  end,
+    start_task(Fun, St0).
+
 %% @throws abortException()
 
-handle_context(T, St) ->
+subtests(#group{context = undefined, tests = T}, F) ->
+    F(T);
+subtests(#group{context = #context{} = C, tests = I}, F) ->
     try
-	eunit_data:enter_context(T, fun (T) -> group(T, St) end)
+	eunit_data:enter_context(C, I, F)
     catch
 	R = setup_failed ->
 	    abort_task(R);
-	R = cleanup_failed ->
+	  R = cleanup_failed ->
 	    abort_task(R);
-	R = instantiation_failed ->
+	  R = instantiation_failed ->
 	    abort_task(R)
     end.
 
