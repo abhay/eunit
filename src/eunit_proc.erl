@@ -191,17 +191,7 @@ spawn_item(T, St0) ->
     start_task(Fun, St0).
 
 get_next_test(I) ->
-    try eunit_data:iter_next(I)
-    catch
-	R = {bad_test, _Bad} ->
-	    abort_task(R);
-	R = {no_such_function, _MFA} ->
-	    abort_task(R);
-	R = {module_not_found, _M} ->
-	    abort_task(R);
-	R = {generator_failed, _Exception} ->
-	    abort_task(R)
-    end.
+    eunit_data:iter_next(I, fun abort_task/1).
 
 %% @throws abortException()
 

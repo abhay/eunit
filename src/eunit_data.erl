@@ -26,7 +26,7 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([list/1, iter_init/1, iter_next/1, iter_prev/1,
+-export([list/1, iter_init/1, iter_next/2, iter_prev/2,
 	 enter_context/2, browse_context/2]).
 
 -import(lists, [foldr/3]).
@@ -90,6 +90,22 @@ iter_init(Tests) ->
 
 %% @spec (testIterator()) -> none | {testItem(), testIterator()}
 
+iter_next(I, H) ->
+    iter_do(fun iter_next/1, I, H).
+
+iter_do(F, I, H) ->
+    try F(I)
+    catch
+	R = {bad_test, _Bad} ->
+	    H(R);
+	R = {no_such_function, _MFA} ->
+	    H(R);
+	R = {module_not_found, _M} ->
+	    H(R);
+	R = {generator_failed, _Exception} ->
+	    H(R)
+    end.
+
 iter_next(I = #iter{next = []}) ->
     case next(I#iter.tests) of
 	{T, Tests} ->
@@ -104,6 +120,9 @@ iter_next(I = #iter{next = [T | Ts]}) ->
 
 
 %% @spec (testIterator()) -> none | {testItem(), testIterator()}
+
+iter_prev(I, H) ->
+    iter_do(fun iter_prev/1, I, H).
 
 iter_prev(#iter{prev = []}) ->
     none;
@@ -346,7 +365,7 @@ list(T) ->
     list_loop(iter_init(T)).
 
 list_loop(I) ->
-    try iter_next(I) of
+    case iter_next(I, fun (R) -> {error, R} end) of
  	{T, I1} ->
  	    case T of
 		#test{} ->
@@ -374,15 +393,6 @@ list_loop(I) ->
 	    end;
  	none ->
  	    []
-    catch
- 	R = {bad_test, _} ->
-	    {error, R};
-	R = {no_such_function, _} ->
-	    {error, R};
-	R = {module_not_found, _} ->
-	    {error, R};
-	R = {generator_failed, _} ->
- 	    {error, R}
     end.
 
 list_context(T) ->
