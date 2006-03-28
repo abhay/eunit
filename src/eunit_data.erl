@@ -26,7 +26,7 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([list/1, iter_init/1, iter_next/2, iter_prev/2,
+-export([list/1, iter_init/2, iter_next/2, iter_prev/2, iter_id/1, 
 	 enter_context/3, browse_context/2]).
 
 -import(lists, [foldr/3]).
@@ -42,6 +42,7 @@
 %%          | {generator, () -> tests()}
 %%          | {generator, M::moduleName(), F::functionName()}
 %%          | {spawn, tests()}
+%%          | {timeout, tests()}
 %%          | {inorder, tests()}
 %%          | {inparallel, tests()}
 %%          | {setup, Setup::() -> R::any(),
@@ -75,13 +76,20 @@
 -record(iter,
 	{prev = [],
 	 next = [],
-	 tests = []}).
+	 tests = [],
+	 pos = 0,
+	 parent = []}).
 
-%% @spec (tests()) -> testIterator()
+%% @spec (tests(), [integer()]) -> testIterator()
 %% @type testIterator()
 
-iter_init(Tests) ->
-    #iter{tests = Tests}.
+iter_init(Tests, ParentID) ->
+    #iter{tests = Tests, parent = lists:reverse(ParentID)}.
+
+%% @spec (testIterator()) -> [integer()]
+
+iter_id(#iter{pos = N, parent = Ns}) ->
+    lists:reverse(Ns, [N]).
 
 %% @throws {bad_test, term()}
 %%       | {generator_failed, exception()}
@@ -111,14 +119,15 @@ iter_next(I = #iter{next = []}) ->
     case next(I#iter.tests) of
 	{T, Tests} ->
 	    {T, I#iter{prev = [T | I#iter.prev],
-		       tests = Tests}};
+		       tests = Tests,
+		       pos = I#iter.pos + 1}};
 	none ->
 	    none
     end;
 iter_next(I = #iter{next = [T | Ts]}) ->
     {T, I#iter{next = Ts,
-	       prev = [T | I#iter.prev]}}.
-
+	       prev = [T | I#iter.prev],
+	       pos = I#iter.pos + 1}}.
 
 %% @spec (testIterator(), Handler) -> none | {testItem(), testIterator()}
 %%    Handler = (term()) -> term()
@@ -130,7 +139,8 @@ iter_prev(#iter{prev = []}) ->
     none;
 iter_prev(#iter{prev = [T | Ts]} = I) ->
     {T, I#iter{prev = Ts,
-	       next = [T | I#iter.next]}}.
+	       next = [T | I#iter.next],
+		       pos = I#iter.pos - 1}}.
 
 
 %% ---------------------------------------------------------------------
@@ -204,6 +214,8 @@ parse({inorder, T}) ->
     group(#group{tests = T, order = true});
 parse({inparallel, T}) ->
     group(#group{tests = T, order = false});
+parse({timeout, N, T}) when is_number(N), N > 0 ->
+    group(#group{tests = T, timeout = round(N * 1000)});
 parse({spawn, T}) ->
     group(#group{tests = T, spawn = true});
 parse({setup, S, C, I} = T)
@@ -259,27 +271,32 @@ group(#group{context = #context{}} = G) ->
     %% leave as it is - the test body is not suitable for lookahead
     G;
 group(#group{tests = T0, desc = Desc, order = Order, context = Context,
-	     spawn = Spawn} = G) ->
+	     spawn = Spawn, timeout = Timeout} = G) ->
     {T1, Ts} = lookahead(T0),
     {T2, _} = lookahead(Ts),
     case T1 of
-	#test{desc = undefined}
-	when T2 == none, Spawn /= true, Context == undefined ->
+	#test{desc = Desc1, timeout = Timeout1}
+	when T2 == none, Spawn /= true, Context == undefined,
+	     ((Desc == undefined) or (Desc1 == undefined)),
+	     ((Timeout == undefined) or (Timeout1 == undefined)) ->
 	    %% a single test within a non-spawn/setup group: put the
-	    %% description directly on the test; no order.
-	    T1#test{desc = Desc};
+	    %% information directly on the test; drop the order
+	    T1#test{desc = join_properties(Desc, Desc1),
+		    timeout = join_properties(Timeout, Timeout1)};
 	#group{desc = Desc1, order = Order1, context = Context1,
-	       spawn = Spawn1}
+	       spawn = Spawn1, timeout = Timeout1}
 	when T2 == none,
 	     ((Desc == undefined) or (Desc1 == undefined)),
 	     ((Order == undefined) or (Order1 == undefined)),
 	     ((Context == undefined) or (Context1 == undefined)),
-	     ((Spawn == undefined) or (Spawn1 == undefined)) ->
+	     ((Spawn == undefined) or (Spawn1 == undefined)),
+	     ((Timeout == undefined) or (Timeout1 == undefined)) ->
 	    %% two nested groups with non-conflicting properties
 	    T1#group{desc = join_properties(Desc, Desc1),
 		     order = join_properties(Order, Order1),
 		     context = join_properties(Context, Context1),
-		     spawn = join_properties(Spawn, Spawn1)};
+		     spawn = join_properties(Spawn, Spawn1),
+		     timeout = join_properties(Timeout, Timeout1)};
 	_ ->
 	    %% leave as it is and discard the lookahead
 	    G
@@ -393,18 +410,18 @@ browse_context(I, F) ->
 %% @type lineNumber() = integer().  Line numbers are always >= 1.
 
 list(T) ->
-    try list(T, 1, [])
+    try list(T, [])
     catch
 	{error, R} -> {error, R}
     end.
 
-list(T, N, Ns) ->
-    list_loop(iter_init(T), N, Ns).
+list(T, ParentID) ->
+    list_loop(iter_init(T, ParentID)).
 
-list_loop(I, N, Ns) ->
+list_loop(I) ->
     case iter_next(I, fun (R) -> throw({error, R}) end) of
  	{T, I1} ->
-	    Id = id(N, Ns),
+	    Id = iter_id(I1),
  	    case T of
 		#test{} ->
 		    Name = case T#test.line of
@@ -412,15 +429,15 @@ list_loop(I, N, Ns) ->
 			       Line -> {T#test.module, T#test.name, Line}
 			   end,
 		    [{item, Id, desc_string(T#test.desc), Name}
-		     | list_loop(I1, N + 1, Ns)];
+		     | list_loop(I1)];
 		#group{context = Context} ->
 		    F = case Context of
-			    #context{} -> fun list_context/3;
-			    _ -> fun list/3
+			    #context{} -> fun list_context/2;
+			    _ -> fun list/2
 			end,
 		    [{group, Id, desc_string(T#group.desc),
-		      F(T#group.tests, 1, [N | Ns])}
-		     | list_loop(I1, N + 1, Ns)]
+		      F(T#group.tests, Id)}
+		     | list_loop(I1)]
 	    end;
  	none ->
  	    []
@@ -429,12 +446,9 @@ list_loop(I, N, Ns) ->
 desc_string(undefined) -> "";
 desc_string(S) -> S.
 
-id(N, Ns) ->
-    lists:reverse(Ns, [N]).
-
-list_context(T, N, Ns) ->
+list_context(T, ParentId) ->
     try
- 	browse_context(T, fun (T) -> list(T, N, Ns) end)
+ 	browse_context(T, fun (T) -> list(T, ParentId) end)
     catch
  	R = instantiation_failed ->
  	    {error, R}

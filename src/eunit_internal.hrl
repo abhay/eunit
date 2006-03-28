@@ -13,7 +13,8 @@
 
 -define(DEFAULT_TEST_SUFFIX, "_test").
 -define(DEFAULT_GENERATOR_SUFFIX, "_test_").
--define(DEFAULT_INSULATOR_TIMEOUT, 5000).
+-define(DEFAULT_GROUP_TIMEOUT, infinity).
+-define(DEFAULT_TEST_TIMEOUT, 5000).
 
 
 %% ---------------------------------------------------------------------
@@ -29,6 +30,7 @@
 
 -record(test, {f = undefined,
 	       desc = undefined,
+	       timeout = undefined,
 	       module = undefined,
 	       name = undefined,
 	       line = 0
@@ -36,6 +38,7 @@
 
 -record(group, {desc = undefined,	% optional description
 		order = undefined,	% run in order or in parallel
+		timeout = undefined,
 		context = undefined,	% setup-context
 		spawn = undefined,	% run group in new process
 		tests = undefined}).

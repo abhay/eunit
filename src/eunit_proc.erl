@@ -29,17 +29,17 @@
 -export([start/4]).
 
 
--record(procstate, {ref, super, parent, order}).
+-record(procstate, {ref, id, super, insulator, parent, order}).
 
+
+%% spawns test process and returns the process Pid; sends {Reference,
+%% Pid} to caller when finished
 
 start(Tests, Reference, Super, Order) ->
     spawn_tester(Tests, init_procstate(Reference, Super, Order)).
 
 init_procstate(Reference, Super, Order) ->
-    #procstate{ref = Reference, super = Super, order = Order}.
-
-message_super(Msg, St) ->
-    St#procstate.super ! Msg.
+    #procstate{ref = Reference, id = [], super = Super, order = Order}.
 
 
 %% ---------------------------------------------------------------------
@@ -47,17 +47,19 @@ message_super(Msg, St) ->
 
 %% A "task" consists of an insulator process and a child process which
 %% handles the actual work. When the child terminates, the insulator
-%% process sends {self(), ExitReason} to the process which started the
+%% process sends {Reference, self()} to the process which started the
 %% task (the "parent"). The child process is given a State record which
-%% contains the process id:s of the parent and the supervisor; however,
-%% the insulator pid is not known to the child.
+%% contains the process id:s of the parent, the insulator, and the
+%% supervisor.
 
 %% @spec ((#procstate{}) -> () -> term(), #procstate{}) -> pid()
 
 start_task(Fun, St0) ->
-    Parent = self(),
-    St = St0#procstate{parent = Parent},
-    spawn_link(fun () -> insulator_process(Fun(St), St) end).
+    St = St0#procstate{parent = self()},
+    %% (note: the link here is mainly to propagate signals *downwards*,
+    %% so that the insulator can detect if the process that started the
+    %% task dies before the task is done)
+    spawn_link(fun () -> insulator_process(Fun, St) end).
 
 %% Simple, failure-proof insulator process
 %% (This is cleaner than temporarily setting up the caller to trap
@@ -65,30 +67,83 @@ start_task(Fun, St0) ->
 
 %% @spec (Fun::() -> term(), St::#procstate{}) -> ok
 
-%% @TODO track state of child process by receiving messages
-%% @TODO adjustable timeouts; no timeout if child itself is in waiting state
-
-insulator_process(Fun, St) ->
+insulator_process(Fun, St0) ->
     process_flag(trap_exit, true),
-    Child = spawn_link(fun () -> child_process(Fun, St) end),
+    St = St0#procstate{insulator = self()},
+    Child = spawn_link(fun () -> child_process(Fun(St), St) end),
     Parent = St#procstate.parent,
+    insulator_wait(Child, Parent, St).
+
+%% Normally, child processes exit with the reason 'normal' even if the
+%% executed tests failed (by throwing exceptions). Child processes can
+%% terminate abnormally by 1) a "syntax error" in the test descriptors;
+%% 2) failure in a setup, cleanup or initialize; 3) an internal error in
+%% the EUnit test runner framework; or 4) receiving a non-trapped error
+%% signal as a consequence of running test code. Since alt. 4) implies
+%% that the test neither reported success nor failure, it can never be
+%% considered "proper" behaviour of a test. Abnormal termination is
+%% reported to the supervisor process but otherwise does not affect the
+%% insulator compared to normal termination.
+
+insulator_wait(Child, Parent, St) ->
     receive
+	{'EXIT', Child, normal} ->
+	    terminate_insulator(St);
 	{'EXIT', Child, Reason} ->
-	    task_reply(Reason, St),
-	    ok;
+	    St#procstate.super ! {died, Child, Reason},
+	    terminate_insulator(St);
 	{'EXIT', Parent, _} ->
-	    terminate_insulator(parent_died, Child)
-    after ?DEFAULT_INSULATOR_TIMEOUT ->
-	    terminate_insulator(timed_out, Child)
+	    kill_task(Child, parent_died, St);
+	{Child, {timeout, Id}} ->
+	    kill_task(Child, {timed_out, Id}, St)
     end.
 
-terminate_insulator(Reason, Child) ->
+%% Unlinking before exit avoids polluting the parent process with exit
+%% signals from the insulator. The child process is already dead here.
+
+terminate_insulator(St) ->
+    %% messaging/unlinking is ok even if the parent is already dead
+    Parent = St#procstate.parent,
+    Parent ! {St#procstate.ref, self()},
+    unlink(Parent),
+    exit(normal).
+
+kill_task(Child, Reason, St) ->
     exit(Child, kill),
-    exit(Reason).
+    St#procstate.super ! {killed, Child, Reason},
+    terminate_insulator(St).
+
+set_timeout(Time, St) ->
+    erlang:send_after(Time, St#procstate.insulator,
+		      {self(), {timeout, St#procstate.id}}).
+
+clear_timeout(Ref) ->
+    erlang:cancel_timer(Ref).
+
+with_timeout(undefined, Default, F, St) ->
+    with_timeout(Default, F, St);
+with_timeout(Time, _Default, F, St) ->
+    with_timeout(Time, F, St).
+
+with_timeout(infinity, F, _St) ->
+    F();
+with_timeout(Time, F, St) when is_integer(Time), Time >= 0 ->
+    Ref = set_timeout(Time, St),
+    try F()
+    after
+	clear_timeout(Ref)
+    end.
+
+%% The normal behaviour of a child process is to trap exit signals. This
+%% makes it easier to write tests that spawn off separate (linked)
+%% processes and test whether they terminate as expected. The testing
+%% framework is not dependent on this, however, so the test code is
+%% allowed to disable signal trapping as it pleases.
 
 %% @spec (() -> term(), #procstate{}) -> ok
 
 child_process(Fun, St) ->
+    process_flag(trap_exit, true),
     try Fun() of
 	_ -> ok
     catch
@@ -97,17 +152,21 @@ child_process(Fun, St) ->
 	    exit(aborted)
     end.
 
-task_reply(ExitReason, St) ->
-    St#procstate.parent ! {St#procstate.ref, self(), ExitReason}.
-    
-%% Typically, the process that executes this code is not trapping
-%% signals, but it might be - it is outside of our control. That is why
-%% the insulator process of a task must be guaranteed to always send a
-%% reply before it terminates (unless it is forcibly killed).
+%% @throws abortException()
+%% @type abortException() = {abort, Reason::term()}
+
+abort_task(Reason) ->
+    throw({abort, Reason}).
+
+%% Typically, the process that executes this code is trapping signals,
+%% but it might not be - it is outside of our control, since test code
+%% could turn off trapping. That is why the insulator process of a task
+%% must be guaranteed to always send a reply before it terminates.
 %%
 %% The unique reference guarantees that we don't extract any message
-%% from the mailbox unless it belongs to the test framework. When the
-%% wait-loop terminates, no such message should remain in the mailbox.
+%% from the mailbox unless it belongs to the test framework (and not to
+%% the running tests). When the wait-loop terminates, no such message
+%% should remain in the mailbox.
 
 wait_for_task(Pid, St) ->
     wait_for_tasks(sets:from_list([Pid]), St).
@@ -117,25 +176,18 @@ wait_for_tasks(PidSet, St) ->
 	0 ->
 	    ok;
 	_ ->
+	    %% (note that when we receive this message for some task, we
+	    %% are guaranteed that the insulator process of the task has
+	    %% already informed the supervisor about any anomalies)
 	    Reference = St#procstate.ref,
 	    receive
-		{Reference, Pid, Reason} ->
- 		    if Reason /= normal ->
- 			    exit({child_died, Pid, Reason});
-		       true ->
-			    %% (if Pid is not in the set, the below has
-			    %% no effect; anyway, that cannot happen)
- 			    Rest = sets:del_element(Pid, PidSet),
- 			    wait_for_tasks(Rest, St)
-		    end
+		{Reference, Pid} ->
+		    %% (if Pid is not in the set, del_element has no
+		    %% effect, so this is always safe)
+		    Rest = sets:del_element(Pid, PidSet),
+		    wait_for_tasks(Rest, St)
 	    end
     end.
-
-%% @throws abortException()
-%% @type abortException() = {abort, Reason::term()}
-
-abort_task(Reason) ->
-    throw({abort, Reason}).
 
 
 %% ---------------------------------------------------------------------
@@ -150,18 +202,21 @@ spawn_tester(T, St0) ->
 %% @throws abortException()
 
 tests(T, St) ->
-    I = eunit_data:iter_init(T),
+    I = eunit_data:iter_init(T, St#procstate.id),
     case St#procstate.order of
 	true -> tests_inorder(I, St);
 	false -> tests_inparallel(I, St)
     end.
+
+set_id(I, St) ->
+    St#procstate{id = eunit_data:iter_id(I)}.
 
 %% @throws abortException()
 
 tests_inorder(I, St) ->
     case get_next_item(I) of
 	{T, I1} ->
-	    handle_item(T, St),
+	    handle_item(T, set_id(I1, St)),
 	    tests_inorder(I1, St);
 	none ->
 	    ok
@@ -175,7 +230,7 @@ tests_inparallel(I, St) ->
 tests_inparallel(I, St, Children) ->
     case get_next_item(I) of
 	{T, I1} ->
-	    Child = spawn_item(T, St),
+	    Child = spawn_item(T, set_id(I1, St)),
 	    tests_inparallel(I1, St, sets:add_element(Child, Children));
 	none ->
 	    wait_for_tasks(Children, St),
@@ -202,29 +257,38 @@ handle_item(T, St) ->
     end.
 
 handle_test(T, St) ->
-    message_super({test, start, {T#test.module, T#test.line,
-				 T#test.name, T#test.desc}},
-		  St),
-    Status = try run_test(T) of
-		 {ok, _Value} ->
-		     %% just throw away the return value
-		     ok;
-		 {error, Exception} ->
-		     {error, Exception}
-	     catch
-		 R = {module_not_found, _M} ->
-		     {skipped, R};
-		 R = {no_such_function, _MFA} ->
-		     {skipped, R}
-	     end,
-    message_super({test, done, Status}, St),
+    Id = St#procstate.id,
+    St#procstate.super ! {test, start, {Id, T#test.module, T#test.line,
+					T#test.name, T#test.desc}},
+    Status = with_timeout(T#test.timeout, ?DEFAULT_TEST_TIMEOUT,
+			  fun () -> run_test(T) end,
+			  St),
+    St#procstate.super ! {test, done, {Id, Status}},
     ok.
+
+%% @spec (#test{}) -> {ok, Value} | {error, eunit_lib:exception()}
+%% @throws eunit_test:wrapperError()
+
+run_test(#test{f = F}) ->
+    try eunit_test:run_testfun(F) of
+	{ok, _Value} ->
+	    %% just throw away the return value
+	    ok;
+	{error, Exception} ->
+	    {error, Exception}
+    catch
+	R = {module_not_found, _M} ->
+	    {skipped, R};
+	  R = {no_such_function, _MFA} ->
+	    {skipped, R}
+    end.
 
 handle_group(T, St0) ->
     St = set_group_order(T, St0),
-    message_super({group, enter, T#group.desc}, St),
+    Id = St#procstate.id,
+    St#procstate.super ! {group, enter, {Id, T#group.desc}},
     run_group(T, St),
-    message_super({group, leave, T#group.desc}, St),
+    St#procstate.super ! {group, leave, {Id, T#group.desc}},
     ok.
 
 set_group_order(#group{order = undefined}, St) ->
@@ -233,21 +297,29 @@ set_group_order(#group{order = Order}, St) ->
     St#procstate{order = Order}.
 
 run_group(T, St) ->
+    Timeout = T#group.timeout,
     case T#group.spawn of
 	true ->
-	    Child = spawn_group(T, St),
+	    Child = spawn_group(T, Timeout, St),
 	    wait_for_task(Child, St);
 	_ ->
-	    subtests(T, fun (T) -> tests(T, St) end)
+	    subtests(T, fun (T) -> group(T, Timeout, St) end)
     end.
 
-spawn_group(T, St0) ->
+spawn_group(T, Timeout, St0) ->
     Fun = fun (St) ->
 		  fun () ->
-			  subtests(T, fun (T) -> tests(T, St) end)
+			  subtests(T, fun (T) ->
+					      group(T, Timeout, St)
+				      end)
 		  end
 	  end,
     start_task(Fun, St0).
+
+group(T, Timeout, St) ->
+    with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
+		 fun () -> tests(T, St) end, St).
+
 
 %% @throws abortException()
 
@@ -264,9 +336,3 @@ subtests(#group{context = #context{} = C, tests = I}, F) ->
 	  R = instantiation_failed ->
 	    abort_task(R)
     end.
-
-%% @spec (#test{}) -> {ok, Value} | {error, eunit_lib:exception()}
-%% @throws eunit_test:wrapperError()
-
-run_test(#test{f = F}) ->
-    eunit_test:run_testfun(F).

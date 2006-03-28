@@ -73,7 +73,7 @@ test(T, Options) ->
     Super = self(),
     Reference = make_ref(),
     Root = eunit_proc:start(T, Reference, Super, Order),
-    Front = eunit_text:start(Reference),
+    Front = eunit_text:start(T, Reference),
     wait(Reference, Root, Front).
 
 
@@ -81,11 +81,16 @@ test(T, Options) ->
 
 wait(Reference, Root, Front) ->
     receive
-	{Reference, Root, normal} ->	
+	{Reference, Root} ->	
 	    done(Reference, Front);
-	{Reference, Root, Reason} ->	
-	    Front ! {terminated, Reason},
-	    done(Reference, Front);
+	{died, Pid, Reason} ->
+	    %% FIXME: do something better here; identify the failed test/group
+	    io:fwrite("*** test process ~w died suddenly: ~P.\n", [Pid, Reason, 15]),
+	    wait(Reference, Root, Front);
+	{killed, Pid, Reason} ->
+	    %% FIXME: do something better here; identify the failed test/group
+	    io:fwrite("*** test process ~w killed by insulator: ~P.\n", [Pid, Reason, 15]),
+	    wait(Reference, Root, Front);
 	Msg ->
 	    Front ! Msg,
 	    wait(Reference, Root, Front)

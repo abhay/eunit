@@ -25,7 +25,7 @@
 
 -module(eunit_text).
 
--export([start/1]).
+-export([start/2]).
 
 -record(state, {ref,
 		succeed = 0,
@@ -33,7 +33,7 @@
 		abort = false,
 		indent = 0}).
 
-start(Reference) ->
+start(_T, Reference) ->
     St = #state{ref = Reference},
     spawn_link(fun () -> init(St) end).
 
@@ -59,7 +59,7 @@ loop(St) ->
 		     end,
 	    ReplyTo ! {Reference, result, Result},
 	    ok;
-	{test, start, {Module, Line, Name, Desc}} ->
+	{test, start, {_Id, Module, Line, Name, Desc}} ->
 	    indent(St#state.indent),
 	    io:fwrite("~s:~s~s~s...",
 		      [Module, 
@@ -72,29 +72,28 @@ loop(St) ->
 			  true -> io_lib:fwrite(" (~s)", [Desc])
 		       end]),
 	    loop(St);
-	{test, done, ok} ->
+	{test, done, {_Id, ok}} ->
 	    io:fwrite("ok\n"),
 	    St1 = St#state{succeed = St#state.succeed + 1},
 	    loop(St1);
-	{test, done, {error, Exception}} ->
+	{test, done, {_Id, {error, Exception}}} ->
 	    io:fwrite("*failed*\n::~p\n\n", [Exception]),
 	    St1 = St#state{fail = St#state.fail + 1},
 	    loop(St1);
-	{test, done, {skipped, Reason}} ->
+	{test, done, {_Id, {skipped, Reason}}} ->
 	    St1 = St#state{fail = St#state.fail + 1},
 	    skipped(Reason),
 	    loop(St1);
-	{group, enter, Desc} ->
-	    case Desc of
-		undefined -> ok;
-		Desc ->
+	{group, enter, {_Id, Desc}} ->
+	    if Desc == undefined ->
+		    ok;
+	       true ->
 		    indent(St#state.indent),
-		    io:fwrite(Desc),
-		    io:nl()
+		    io:fwrite("~s\n", [Desc])
 	    end,
 	    St1 = St#state{indent = St#state.indent + 1},
 	    loop(St1);
-	{group, leave, _Desc} ->
+	{group, leave, {_Id, _Desc}} ->
 	    St1 = St#state{indent = St#state.indent - 1},
 	    loop(St1);
 	{abort, Reason} ->
@@ -133,9 +132,7 @@ aborted(Reason) ->
 	{module_not_found, M} ->
 	    abort_msg("test module not found", "~p", [M]);
 	{generator_failed, Exception} ->
-	    abort_msg("test generator failed", "~p", [Exception]);
-	{terminated, Reason} ->
-	    abort_msg("abnormal termination", "~p", [Reason])
+	    abort_msg("test generator failed", "~p", [Exception])
     end.
 
 abort_msg(Title, Str, Args) ->
