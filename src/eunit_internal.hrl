@@ -17,9 +17,6 @@
 -define(DEFAULT_TEST_TIMEOUT, 5000).
 
 
-%% ---------------------------------------------------------------------
-%% Protocol records
-
 -ifndef(NDEBUG).
 -define(debugmsg(S),io:fwrite("\n* ~s: ~s\n", [?MODULE,S])).
 -define(debugmsg1(S,As),io:fwrite("\n* ~s: " ++ S ++ "\n", [?MODULE] ++ As)).
@@ -27,6 +24,10 @@
 -define(debugmsg(S),ok).
 -define(debugmsg1(S,As),ok).
 -endif.
+
+
+%% ---------------------------------------------------------------------
+%% Internal test data representation
 
 -record(test, {f = undefined,
 	       desc = undefined,
