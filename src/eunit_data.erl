@@ -348,7 +348,9 @@ get_module_tests(M) ->
 %% ---------------------------------------------------------------------
 %% Entering a setup-context, with guaranteed cleanup.
 
-%% @spec (Tests::#context{}, Callback::(any()) -> any()) -> any()
+%% @spec (Tests::#context{}, Instantiate, Callback) -> any()
+%%    Instantiate = (any()) -> tests()
+%%    Callback = (tests()) -> any()
 %% @throws setup_failed | instantiation_failed | cleanup_failed
 
 enter_context(#context{setup = S, cleanup = C}, I, F) ->
@@ -401,13 +403,14 @@ browse_context(I, F) ->
 
 %% Returns a list of test info using a similar format to tests() above:
 %%
-%% @type testInfoList() = [{Id, testInfo()}]
-%%   Id = [integer()]
+%% @type testInfoList() = [{testId(), testInfo()}]
+%% @type testId() = [integer()]
 %% @type testInfo() = {moduleName(), functionName()}
 %%		    | {moduleName(), functionName(), lineNumber()}
-%%		    | {description(), testInfo()}
-%%		    | {description(), testInfoList()}
-%% @type lineNumber() = integer().  Line numbers are always >= 1.
+%%		    | {Description, testInfo()}
+%%		    | {Description, testInfoList()}
+%%   Description = string()
+%% @type lineNumber() = integer().  Proper line numbers are always >= 1.
 
 list(T) ->
     try list(T, [])
