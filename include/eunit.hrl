@@ -14,6 +14,9 @@
 %%     $Id: eunit.hrl,v 1.1 2004/12/04 15:12:36 mremond Exp $
 %%
 
+-ifndef(EUNIT_HRL).
+-define(EUNIT_HRL, true).
+
 %% Since this file is normally included with include_lib, it must in its
 %% turn use include_lib to read any other header files, at least until
 %% the epp include_lib behaviour is fixed.
@@ -46,3 +49,5 @@
 -define(_assertError(Term, Expr), ?_assertException(error, Term, Expr)).
 -define(_assertExit(Term, Expr), ?_assertException(exit, Term, Expr)).
 -define(_assertThrow(Term, Expr), ?_assertException(throw, Term, Expr)).
+
+-endif. % EUNIT_HRL
