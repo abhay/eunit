@@ -167,6 +167,8 @@ next(Tests) ->
 	    none
     end.
 
+parse({foreach, S, Fs}) when is_function(S), is_list(Fs) ->
+    parse({foreach, S, fun (_) -> ok end, Fs});
 parse({foreach, S, C, Fs} = T)
   when is_function(S), is_function(C), is_list(Fs) ->
     check_arity(S, 0, T),
@@ -180,6 +182,8 @@ parse({foreach, S, C, Fs} = T)
 	_ ->
 	    throw({bad_test, T})
     end;
+parse({foreach1, S1, Ps}) when is_function(S1), is_list(Ps) ->
+    parse({foreach1, S1, fun (_, _) -> ok end, Ps});
 parse({foreach1, S1, C1, Ps} = T) 
   when is_function(S1), is_function(C1), is_list(Ps) ->
     check_arity(S1, 1, T),
@@ -214,10 +218,12 @@ parse({inorder, T}) ->
     group(#group{tests = T, order = true});
 parse({inparallel, T}) ->
     group(#group{tests = T, order = false});
-parse({timeout, N, T}) when is_number(N), N > 0 ->
+parse({timeout, N, T}) when is_number(N), N >= 0 ->
     group(#group{tests = T, timeout = round(N * 1000)});
 parse({spawn, T}) ->
     group(#group{tests = T, spawn = true});
+parse({setup, S, I}) when is_function(S), is_function(I) ->
+    parse({setup, S, fun (_) -> ok end, I});
 parse({setup, S, C, I} = T)
   when is_function(S), is_function(C), is_function(I) ->
     check_arity(S, 0, T),
@@ -401,6 +407,8 @@ browse_context(I, F) ->
 
 %% ---------------------------------------------------------------------
 
+%% @TODO update documentation of data structure
+
 %% Returns a list of test info using a similar format to tests() above:
 %%
 %% @type testInfoList() = [{testId(), testInfo()}]
@@ -411,6 +419,8 @@ browse_context(I, F) ->
 %%		    | {Description, testInfoList()}
 %%   Description = string()
 %% @type lineNumber() = integer().  Proper line numbers are always >= 1.
+
+%% @TODO change error handling; only pass correct listing to user interface
 
 list(T) ->
     try list(T, [])
