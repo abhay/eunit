@@ -43,7 +43,7 @@
 -ifndef(NOTEST).
 %% Cause all the other modules to be tested as well as this one.
 full_test_() ->
-    [eunit_proc, eunit_test, eunit_lib, eunit_data, eunit_old].
+    [eunit_proc, eunit_test, eunit_lib, eunit_data, eunit_old, eunit_tty].
 -endif.
 
 
@@ -70,35 +70,26 @@ testp(T) ->
 test(T, Options) ->
     %% The default is to run tests in order unless otherwise specified
     Order = proplists:get_bool(order, Options),
-    Super = self(),
     Reference = make_ref(),
+    Super = eunit_tty:start(Reference, list(T)),
     Root = eunit_proc:start(T, Reference, Super, Order),
-    Front = eunit_text:start(T, Reference),
-    wait(Reference, Root, Front).
+    wait(Reference, Root, Super).
 
-
-%% @TODO fix so that we don't have to forward messages to the frontend
+%% @TODO better system for setting up and waiting for tests and interface
 
 wait(Reference, Root, Front) ->
     receive
-	{Reference, Root} ->	
-	    done(Reference, Front);
-	{died, Pid, Reason} ->
-	    %% FIXME: do something better here; identify the failed test/group
-	    io:fwrite("*** test process ~w died suddenly: ~P.\n", [Pid, Reason, 15]),
-	    wait(Reference, Root, Front);
-	{killed, Pid, Reason} ->
-	    %% FIXME: do something better here; identify the failed test/group
-	    io:fwrite("*** test process ~w killed by insulator: ~P.\n", [Pid, Reason, 15]),
-	    wait(Reference, Root, Front);
-	Msg ->
-	    Front ! Msg,
-	    wait(Reference, Root, Front)
+	{done, Reference, Root} ->
+	    ?debugmsg("*** received done message from Root process\n"),
+	    done(Reference, Front)
+%%    ; _Other ->
+%% 	    ?debugmsg1("Unexpected message: ~w.", [_Other]),
+%% 	    wait(Reference, Root, Front)
     end.
 
 done(Reference, Front) ->
-    Front ! {Reference, stop, self()},
+    Front ! {stop, Reference, self()},
     receive 
-	{Reference, result, Result} ->
+	{result, Reference, Result} ->
 	    Result
     end.

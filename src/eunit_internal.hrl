@@ -8,7 +8,7 @@
 %% @doc 
 
 %%-define(NOTEST, true).
--define(NDEBUG, true).
+%%-define(DEBUG, true).
 
 
 -define(DEFAULT_TEST_SUFFIX, "_test").
@@ -17,7 +17,7 @@
 -define(DEFAULT_TEST_TIMEOUT, 5000).
 
 
--ifndef(NDEBUG).
+-ifdef(DEBUG).
 -define(debugmsg(S),io:fwrite("\n* ~s: ~s\n", [?MODULE,S])).
 -define(debugmsg1(S,As),io:fwrite("\n* ~s: " ++ S ++ "\n", [?MODULE] ++ As)).
 -else.
@@ -37,10 +37,10 @@
 	       line = 0
 	      }).
 
--record(group, {desc = undefined,	% optional description
+-record(group, {desc = undefined,
 		order = undefined,	% run in order or in parallel
 		timeout = undefined,
-		context = undefined,	% setup-context
+		context = undefined,	% setup-context record
 		spawn = undefined,	% run group in new process
 		tests = undefined}).
 

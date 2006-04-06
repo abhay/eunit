@@ -32,8 +32,8 @@
 -record(procstate, {ref, id, super, insulator, parent, order}).
 
 
-%% spawns test process and returns the process Pid; sends {Reference,
-%% Pid} to caller when finished
+%% spawns test process and returns the process Pid; sends {done,
+%% Reference, Pid} to caller when finished
 
 start(Tests, Reference, Super, Order) ->
     spawn_tester(Tests, init_procstate(Reference, Super, Order)).
@@ -47,9 +47,9 @@ init_procstate(Reference, Super, Order) ->
 
 %% A "task" consists of an insulator process and a child process which
 %% handles the actual work. When the child terminates, the insulator
-%% process sends {Reference, self()} to the process which started the
-%% task (the "parent"). The child process is given a State record which
-%% contains the process id:s of the parent, the insulator, and the
+%% process sends {done, Reference, self()} to the process which started
+%% the task (the "parent"). The child process is given a State record
+%% which contains the process id:s of the parent, the insulator, and the
 %% supervisor.
 
 %% @spec ((#procstate{}) -> () -> term(), #procstate{}) -> pid()
@@ -75,27 +75,60 @@ insulator_process(Fun, St0) ->
     insulator_wait(Child, Parent, St).
 
 %% Normally, child processes exit with the reason 'normal' even if the
-%% executed tests failed (by throwing exceptions). Child processes can
-%% terminate abnormally by 1) a "syntax error" in the test descriptors;
-%% 2) failure in a setup, cleanup or initialize; 3) an internal error in
-%% the EUnit test runner framework; or 4) receiving a non-trapped error
-%% signal as a consequence of running test code. Since alt. 4) implies
-%% that the test neither reported success nor failure, it can never be
-%% considered "proper" behaviour of a test. Abnormal termination is
-%% reported to the supervisor process but otherwise does not affect the
-%% insulator compared to normal termination.
+%% executed tests failed (by throwing exceptions), since the tests are
+%% executed within a try-block. Child processes can terminate abnormally
+%% by the following reasons:
+%%   1) an error in the processing of the test descriptors (a malformed
+%%      descriptor, failure in a setup, cleanup or initialization, a
+%%      missing module or function, or a failing generator function);
+%%   2) an internal error in the test running framework itself;
+%%   3) receiving a non-trapped error signal as a consequence of running
+%%      test code.
+%% Those under point 1 are "expected errors", handled specially in the
+%% protocol, while the other two are unexpected errors. (Since alt. 3
+%% implies that the test neither reported success nor failure, it can
+%% never be considered "proper" behaviour of a test.) Abnormal
+%% termination is reported to the supervisor process but otherwise does
+%% not affect the insulator compared to normal termination. Child
+%% processes can also be killed abruptly by their insulators, in case of
+%% a timeout or if a parent process dies.
 
 insulator_wait(Child, Parent, St) ->
     receive
+	{progress, Child, Id, Msg} ->
+	    status_message(Id, {progress, Msg}, St),
+	    insulator_wait(Child, Parent, St);
+	{abort, Child, Id, Reason} ->
+	    exit_message(Id, {abort, Reason}, St),
+	    %% no need to wait for the {'EXIT',Child,_} message
+	    terminate_insulator(St);
+	{timeout, Child, Id} ->
+	    exit_message(Id, timeout, St),
+	    kill_task(Child, St);
 	{'EXIT', Child, normal} ->
 	    terminate_insulator(St);
 	{'EXIT', Child, Reason} ->
-	    St#procstate.super ! {died, Child, Reason},
+	    exit_message(St#procstate.id, {exit, Reason}, St),
 	    terminate_insulator(St);
 	{'EXIT', Parent, _} ->
-	    kill_task(Child, parent_died, St);
-	{Child, {timeout, Id}} ->
-	    kill_task(Child, {timed_out, Id}, St)
+	    %% make sure child processes are cleaned up recursively
+	    kill_task(Child, St)
+    end.
+
+status_message(Id, Msg, St) ->
+    St#procstate.super ! {status, Id, Msg}.
+
+%% send status messages for the Id of the "causing" item, and also for
+%% the Id of the insulator itself, if they are different
+
+%% TODO: this function naming is not very good. too many similar names.
+exit_message(Id, Msg0, St) ->
+    %% note that the most specific Id is always sent first
+    Msg = {cancel, Msg0},
+    status_message(Id, Msg, St),
+    case St#procstate.id of
+	Id -> ok;
+	Id1 -> status_message(Id1, Msg, St)
     end.
 
 %% Unlinking before exit avoids polluting the parent process with exit
@@ -104,18 +137,26 @@ insulator_wait(Child, Parent, St) ->
 terminate_insulator(St) ->
     %% messaging/unlinking is ok even if the parent is already dead
     Parent = St#procstate.parent,
-    Parent ! {St#procstate.ref, self()},
+    Parent ! {done, St#procstate.ref, self()},
     unlink(Parent),
     exit(normal).
 
-kill_task(Child, Reason, St) ->
+kill_task(Child, St) ->
     exit(Child, kill),
-    St#procstate.super ! {killed, Child, Reason},
     terminate_insulator(St).
+
+%% Note that child processes send all messages via the insulator to
+%% ensure proper sequencing with timeouts and exit signals.
+
+abort_message(Reason, St) ->
+    St#procstate.insulator ! {abort, self(), St#procstate.id, Reason}.
+
+progress_message(Msg, St) ->
+    St#procstate.insulator ! {progress, self(), St#procstate.id, Msg}.
 
 set_timeout(Time, St) ->
     erlang:send_after(Time, St#procstate.insulator,
-		      {self(), {timeout, St#procstate.id}}).
+		      {timeout, self(), St#procstate.id}).
 
 clear_timeout(Ref) ->
     erlang:cancel_timer(Ref).
@@ -126,10 +167,19 @@ with_timeout(Time, _Default, F, St) ->
     with_timeout(Time, F, St).
 
 with_timeout(infinity, F, _St) ->
-    F();
+    %% don't start timers unnecessarily
+    {T0, _} = statistics(wall_clock),
+    Value = F(),
+    {T1, _} = statistics(wall_clock),
+    {Value, T1 - T0};
 with_timeout(Time, F, St) when is_integer(Time), Time >= 0 ->
     Ref = set_timeout(Time, St),
-    try F()
+    {T0, _} = statistics(wall_clock),
+    try F() of
+	Value ->
+	    %% we could also read the timer, but this is simpler
+	    {T1, _} = statistics(wall_clock),
+	    {Value, T1 - T0}
     after
 	clear_timeout(Ref)
     end.
@@ -148,7 +198,7 @@ child_process(Fun, St) ->
 	_ -> ok
     catch
 	{abort, Reason} ->
-	    St#procstate.super ! {abort, Reason},
+	    abort_message(Reason, St),
 	    exit(aborted)
     end.
 
@@ -181,7 +231,7 @@ wait_for_tasks(PidSet, St) ->
 	    %% already informed the supervisor about any anomalies)
 	    Reference = St#procstate.ref,
 	    receive
-		{Reference, Pid} ->
+		{done, Reference, Pid} ->
 		    %% (if Pid is not in the set, del_element has no
 		    %% effect, so this is always safe)
 		    Rest = sets:del_element(Pid, PidSet),
@@ -257,13 +307,10 @@ handle_item(T, St) ->
     end.
 
 handle_test(T, St) ->
-    Id = St#procstate.id,
-    St#procstate.super ! {test, start, {Id, T#test.module, T#test.line,
-					T#test.name, T#test.desc}},
-    Status = with_timeout(T#test.timeout, ?DEFAULT_TEST_TIMEOUT,
-			  fun () -> run_test(T) end,
-			  St),
-    St#procstate.super ! {test, done, {Id, Status}},
+    progress_message({'begin', test}, St),
+    {Status, Time} = with_timeout(T#test.timeout, ?DEFAULT_TEST_TIMEOUT,
+				  fun () -> run_test(T) end, St),
+    progress_message({'end', {Status, Time}}, St),
     ok.
 
 %% @spec (#test{}) -> {ok, Value} | {error, eunit_lib:exception()}
@@ -283,20 +330,13 @@ run_test(#test{f = F}) ->
 	    {skipped, R}
     end.
 
-handle_group(T, St0) ->
-    St = set_group_order(T, St0),
-    Id = St#procstate.id,
-    St#procstate.super ! {group, enter, {Id, T#group.desc}},
-    run_group(T, St),
-    St#procstate.super ! {group, leave, {Id, T#group.desc}},
-    ok.
-
 set_group_order(#group{order = undefined}, St) ->
     St;
 set_group_order(#group{order = Order}, St) ->
     St#procstate{order = Order}.
 
-run_group(T, St) ->
+handle_group(T, St0) ->
+    St = set_group_order(T, St0),
     Timeout = T#group.timeout,
     case T#group.spawn of
 	true ->
@@ -317,8 +357,11 @@ spawn_group(T, Timeout, St0) ->
     start_task(Fun, St0).
 
 group(T, Timeout, St) ->
-    with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
-		 fun () -> tests(T, St) end, St).
+    progress_message({'begin', group}, St),
+    {Value, Time} = with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
+				 fun () -> tests(T, St) end, St),
+    progress_message({'end', Time}, St),
+    Value.
 
 
 %% @throws abortException()
