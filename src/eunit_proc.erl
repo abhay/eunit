@@ -37,7 +37,8 @@
 
 start(Tests, Reference, Super, Order) ->
     St = init_procstate(Reference, Super, Order),
-    spawn_group(#group{tests = Tests}, St#procstate{id = []}).
+    handle_group(#group{tests = Tests, spawn = local},
+		 St#procstate{id = []}).
 
 init_procstate(Reference, Super, Order) ->
     #procstate{ref = Reference, super = Super, order = Order}.
@@ -83,26 +84,76 @@ init_procstate(Reference, Super, Order) ->
 %% which contains the process id:s of the parent, the insulator, and the
 %% supervisor.
 
-%% @spec ((#procstate{}) -> () -> term(), #procstate{}) -> pid()
+%% @spec (Type, (#procstate{}) -> () -> term(), #procstate{}) -> pid()
+%%   Type = local | {remote, Node::atom()}
 
-start_task(Fun, St0) ->
+start_task(Type, Fun, St0) ->
     St = St0#procstate{parent = self()},
     %% (note: the link here is mainly to propagate signals *downwards*,
     %% so that the insulator can detect if the process that started the
     %% task dies before the task is done)
-    spawn_link(fun () -> insulator_process(Fun, St) end).
+    F = fun () -> insulator_process(Type, Fun, St) end,
+    case Type of
+	local ->
+	    %% we assume (at least for now) that local spawns can never
+	    %% fail in such a way that the process does not start, so a
+	    %% new local insulator does not need to synchronize here
+	    spawn_link(F);
+	{remote, Node} ->
+	    Pid = spawn_link(Node, F),
+	    %% See below for the need for the {ok, Reference, Pid}
+	    %% message.
+	    Reference = St#procstate.ref,
+	    Monitor = erlang:monitor(process, Pid),
+	    %% assume that the DOWN message will arrive after any
+	    %% messages sent by the process itself... this is not
+	    %% documented, so it might not be correct. bummer.
+	    receive
+		{ok, Reference, Pid} ->
+		    Pid;
+		{'DOWN', Monitor, process, Pid, Reason} ->
+		    %% send messages as if the insulator process was
+		    %% started, but terminated on its own accord
+		    Msg = {startup, Reason},
+		    status_message(St#procstate.id, {cancel, Msg}, St),
+		    self() ! {done, Reference, Pid}
+	    end,
+	    erlang:demonitor(Monitor),
+	    %% purge any stray DOWN messages from the mailbox (this
+	    %% could happen even if the insulator started properly, due
+	    %% to race conditions, if we don't cancel the monitor before
+	    %% the insulator terminates)
+	    receive
+		{'DOWN', Monitor, process, Pid, _} -> ok
+	    after 0 -> ok
+	    end,
+	    Pid
+    end.
 
 %% Simple, failure-proof insulator process
 %% (This is cleaner than temporarily setting up the caller to trap
 %% signals, and does not affect the caller's mailbox or other state.)
+%%
+%% We assume that nobody does a 'kill' on an insulator process - if that
+%% should happen, the test framework will hang since the insulator will
+%% never send a reply; see below for more.
+%%
+%% Note that even if the insulator process itself never fails, it is
+%% still possible that it does not start properly, if it is spawned
+%% remotely (e.g., if the remote node is down). Therefore, remote
+%% insulators must always immediately send an {ok, Reference, self()}
+%% message to the parent as soon as it is spawned.
 
 %% @spec (Fun::() -> term(), St::#procstate{}) -> ok
 
-insulator_process(Fun, St0) ->
+insulator_process(Type, Fun, St0) ->
     process_flag(trap_exit, true),
+    Parent = St0#procstate.parent,
+    if Type == local -> ok;
+       true -> Parent ! {ok, St0#procstate.ref, self()}
+    end,
     St = St0#procstate{insulator = self()},
     Child = spawn_link(fun () -> child_process(Fun(St), St) end),
-    Parent = St#procstate.parent,
     insulator_wait(Child, Parent, St).
 
 %% Normally, child processes exit with the reason 'normal' even if the
@@ -310,7 +361,8 @@ spawn_item(T, St0) ->
     Fun = fun (St) ->
 		  fun () -> handle_item(T, St) end
 	  end,
-    start_task(Fun, St0).
+    %% inparallel-items are always spawned locally
+    start_task(local, Fun, St0).
 
 get_next_item(I) ->
     eunit_data:iter_next(I, fun abort_task/1).
@@ -353,18 +405,18 @@ set_group_order(#group{order = Order}, St) ->
 handle_group(T, St0) ->
     St = set_group_order(T, St0),
     case T#group.spawn of
-	true ->
-	    Child = spawn_group(T, St),
-	    wait_for_task(Child, St);
-	_ ->
-	    enter_group(T, St)
+	undefined ->
+	    enter_group(T, St);
+	Type ->
+	    Child = spawn_group(Type, T, St),
+	    wait_for_task(Child, St)
     end.
 
-spawn_group(T, St0) ->
+spawn_group(Type, T, St0) ->
     Fun = fun (St) ->
 		  fun () -> enter_group(T, St) end
 	  end,
-    start_task(Fun, St0).
+    start_task(Type, Fun, St0).
 
 enter_group(T, St) ->
     Timeout = T#group.timeout,

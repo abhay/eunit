@@ -42,6 +42,7 @@
 %%          | {generator, () -> tests()}
 %%          | {generator, M::moduleName(), F::functionName()}
 %%          | {spawn, tests()}
+%%          | {spawn, Node::atom(), tests()}
 %%          | {timeout, tests()}
 %%          | {inorder, tests()}
 %%          | {inparallel, tests()}
@@ -221,7 +222,9 @@ parse({inparallel, T}) ->
 parse({timeout, N, T}) when is_number(N), N >= 0 ->
     group(#group{tests = T, timeout = round(N * 1000)});
 parse({spawn, T}) ->
-    group(#group{tests = T, spawn = true});
+    group(#group{tests = T, spawn = local});
+parse({spawn, N, T}) ->
+    group(#group{tests = T, spawn = {remote, N}});
 parse({setup, S, I}) when is_function(S), is_function(I) ->
     parse({setup, S, fun (_) -> ok end, I});
 parse({setup, S, C, I} = T)
@@ -282,7 +285,7 @@ group(#group{tests = T0, desc = Desc, order = Order, context = Context,
     {T2, _} = lookahead(Ts),
     case T1 of
 	#test{desc = Desc1, timeout = Timeout1}
-	when T2 == none, Spawn /= true, Context == undefined,
+	when T2 == none, Spawn == undefined, Context == undefined,
 	     ((Desc == undefined) or (Desc1 == undefined)),
 	     ((Timeout == undefined) or (Timeout1 == undefined)) ->
 	    %% a single test within a non-spawn/setup group: put the

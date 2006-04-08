@@ -199,6 +199,8 @@ wait(Id, Type, St) ->
 		    case Cause of
 			timeout ->
 			    ?debugmsg1("*** ~w: timeout - test process killed by insulator\n", [SomeId]);
+			{startup, _Reason} ->
+			    ?debugmsg1("*** ~w: could not start test process: ~P.\n", [SomeId, _Reason, 15]);
 			{exit, _Reason} ->
 			    ?debugmsg1("*** ~w: test process died suddenly: ~P.\n", [SomeId, _Reason, 15]);
 			{abort, _Reason} ->
