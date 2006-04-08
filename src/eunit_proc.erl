@@ -36,10 +36,41 @@
 %% Reference, Pid} to caller when finished
 
 start(Tests, Reference, Super, Order) ->
-    spawn_tester(Tests, init_procstate(Reference, Super, Order)).
+    St = init_procstate(Reference, Super, Order),
+    spawn_group(#group{tests = Tests}, St#procstate{id = []}).
 
 init_procstate(Reference, Super, Order) ->
-    #procstate{ref = Reference, id = [], super = Super, order = Order}.
+    #procstate{ref = Reference, super = Super, order = Order}.
+
+
+%% @TODO implement synchronized mode for insulator/child execution
+
+%% Ideas for synchronized mode:
+%%
+%% * At each "program point", i.e., before entering a test, entering a
+%% group, or leaving a group, the child will synchronize with the
+%% insulator to make sure it is ok to proceed.
+%%
+%% * The insulator can receive controlling messages from higher up in
+%% the hierarchy, telling it to pause, resume, single-step, repeat, etc.
+%%
+%% * Synchronization on entering/leaving groups is necessary in order to
+%% get control over things such as subprocess creation/termination and
+%% setup/cleanup, making it possible to, e.g., repeat all the tests
+%% within a particular subprocess without terminating and restarting it,
+%% or repeating tests without repeating the setup/cleanup.
+%%
+%% * Some tests that depend on state will not be possible to repeat, but
+%% require a fresh context setup. There is nothing that can be done
+%% about this, and the many tests that are repeatable should not be
+%% punished because of it. The user must decide which level to restart.
+%%
+%% * Question: How propagate control messages down the hierarchy
+%% (preferably only to the correct insulator process)? An insulator does
+%% not currenctly know whether its child process has spawned subtasks.
+%% (The "supervisor" process does not know the Pids of the controlling
+%% insulator processes in the tree, and it probably should not be
+%% responsible for this anyway.)
 
 
 %% ---------------------------------------------------------------------
@@ -243,14 +274,6 @@ wait_for_tasks(PidSet, St) ->
 %% ---------------------------------------------------------------------
 %% Separate testing process
 
-spawn_tester(T, St0) ->
-    Fun = fun (St) ->
-		  fun () -> tests(T, St) end
-	  end,
-    start_task(Fun, St0).
-
-%% @throws abortException()
-
 tests(T, St) ->
     I = eunit_data:iter_init(T, St#procstate.id),
     case St#procstate.order of
@@ -261,8 +284,6 @@ tests(T, St) ->
 set_id(I, St) ->
     St#procstate{id = eunit_data:iter_id(I)}.
 
-%% @throws abortException()
-
 tests_inorder(I, St) ->
     case get_next_item(I) of
 	{T, I1} ->
@@ -271,8 +292,6 @@ tests_inorder(I, St) ->
 	none ->
 	    ok
     end.
-
-%% @throws abortException()
 
 tests_inparallel(I, St) ->
     tests_inparallel(I, St, sets:new()).
@@ -287,8 +306,6 @@ tests_inparallel(I, St, Children) ->
 	    ok
     end.
 
-%% @throws abortException()
-
 spawn_item(T, St0) ->
     Fun = fun (St) ->
 		  fun () -> handle_item(T, St) end
@@ -297,8 +314,6 @@ spawn_item(T, St0) ->
 
 get_next_item(I) ->
     eunit_data:iter_next(I, fun abort_task/1).
-
-%% @throws abortException()
 
 handle_item(T, St) ->
     case T of
@@ -337,38 +352,34 @@ set_group_order(#group{order = Order}, St) ->
 
 handle_group(T, St0) ->
     St = set_group_order(T, St0),
-    Timeout = T#group.timeout,
     case T#group.spawn of
 	true ->
-	    Child = spawn_group(T, Timeout, St),
+	    Child = spawn_group(T, St),
 	    wait_for_task(Child, St);
 	_ ->
-	    subtests(T, fun (T) -> group(T, Timeout, St) end)
+	    enter_group(T, St)
     end.
 
-spawn_group(T, Timeout, St0) ->
+spawn_group(T, St0) ->
     Fun = fun (St) ->
-		  fun () ->
-			  subtests(T, fun (T) ->
-					      group(T, Timeout, St)
-				      end)
-		  end
+		  fun () -> enter_group(T, St) end
 	  end,
     start_task(Fun, St0).
 
-group(T, Timeout, St) ->
+enter_group(T, St) ->
+    Timeout = T#group.timeout,
+    with_context(T, fun (T) -> run_group(T, Timeout, St) end).
+
+run_group(T, Timeout, St) ->
     progress_message({'begin', group}, St),
     {Value, Time} = with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
 				 fun () -> tests(T, St) end, St),
     progress_message({'end', Time}, St),
     Value.
 
-
-%% @throws abortException()
-
-subtests(#group{context = undefined, tests = T}, F) ->
+with_context(#group{context = undefined, tests = T}, F) ->
     F(T);
-subtests(#group{context = #context{} = C, tests = I}, F) ->
+with_context(#group{context = #context{} = C, tests = I}, F) ->
     try
 	eunit_data:enter_context(C, I, F)
     catch

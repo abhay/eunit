@@ -45,9 +45,17 @@ start(Reference, List) ->
     spawn_link(fun () -> init(List, St) end).
 
 init(List, St0) ->
+    Id = [],
     io:fwrite("=== EUnit ===\n"),
     try
-	list(List, St0)
+	?debugmsg1("waiting for ~w begin", [Id]),
+	{group, St1} = wait(Id, 'begin', St0),
+	?debugmsg1("got ~w begin", [Id]),
+	St2 = list(List, St1),
+	?debugmsg1("waiting for ~w end", [Id]),
+	{_Time, St3} = wait(Id, 'end', St2),
+	?debugmsg1("got ~w end after ~w ms", [Id, _Time]),
+	St3
     of
 	St ->
 	    ?debugmsg1("top list done: ~w", [St]),
@@ -190,18 +198,18 @@ wait(Id, Type, St) ->
 		    %% @TODO FIXME: proper handling/reporting of exit causes
 		    case Cause of
 			timeout ->
-			    ?debugmsg1("*** ~w: timeout - test process killed by insulator\n", [Id]);
+			    ?debugmsg1("*** ~w: timeout - test process killed by insulator\n", [SomeId]);
 			{exit, _Reason} ->
-			    ?debugmsg1("*** ~w: test process died suddenly: ~P.\n", [Id, _Reason, 15]);
+			    ?debugmsg1("*** ~w: test process died suddenly: ~P.\n", [SomeId, _Reason, 15]);
 			{abort, _Reason} ->
-			    ?debugmsg1("*** ~w: test process aborted: ~P.\n", [Id, _Reason, 15])
+			    ?debugmsg1("*** ~w: test process aborted: ~P.\n", [SomeId, _Reason, 15])
 		    end,
 		    wait(Id, Type, set_cancelled(SomeId, St));
 		{status, Id, {progress, {Type, Data}}} ->
 		    {Data, St}
-%% 	      ; _Other ->
-%% 		    ?debugmsg1("Unexpected message: ~w.", [_Other]),
-%% 		    wait(Id, Type, St)
+%%  	      ; _Other ->
+%%  		    ?debugmsg1("Unexpected message: ~w when Id = ~w.", [_Other, Id]),
+%%  		    wait(Id, Type, St)
 	    end;
 	_ ->
 	    abort(Id, St)
