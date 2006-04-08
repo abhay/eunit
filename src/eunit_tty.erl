@@ -168,7 +168,7 @@ entry({group, Id, Desc, Es1}, St) ->
 		{Time, St4} = wait(Id, 'end', St3),
 		?debugmsg1("got ~w end", [Id]),
 		if Time > 0 ->
-			indent(I + 1),
+			indent(St2#state.indent),
 			io:fwrite("[group done in ~.3f s]\n", [Time/1000]);
 		   true ->
 			ok
