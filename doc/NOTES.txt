@@ -1,5 +1,7 @@
 
-Concepts:
+Concepts and features
+---------------------
+
  - separation of tests and test runners (different ways of reporting)
 
    * tests represented by data structures
@@ -22,7 +24,7 @@ Concepts:
 
    * tests are just nullary funs; this is both simple and powerful
    * you can use 'fun name/arity' or 'fun module:name/arity' for sharing code
-   * maketest-functions are used to create specialized test funs
+   * generator functions are used to create specialized test funs
 
  - executing a test by calling directly should have observable
    failure/success, and tests should not in themselves output test
@@ -79,7 +81,7 @@ Concepts:
    * writing '-include_lib("eunit/include/eunit_auto.hrl").' inserts a
      parse transform (unless NOTEST is defined) which automatically
      exports functions identified as test functions with the proper
-     suffixes and arity.
+     suffixes and arity. Also includes eunit.hrl automatically.
 
  - decorating a normal module with common eunit entry functions
 
@@ -89,16 +91,18 @@ Concepts:
 
  - label of a single test
 
-   * {"...", Test}
+   * {"...", Test}, also works for groups.
 
  - context of a single test; set up and tear down of context; multiple
    tests within same context (single set up/tear down)
 
-   * {setup, Setup, Teardown, Test}
+   * {setup, Setup, Teardown, Generator}
+   * {setup, Setup, Generator} works as a simple let-binding
 
  - multiple tests using same context (individual set up/tear down)
 
-   * {foreach, Setup, Teardown, MakeTests} |  {foreach1, ...}
+   * {foreach, Setup, Teardown, [Generator]}
+     {foreach1, Setup, Teardown, [{Arg, Generator}]}
 
  - aggregation of tests in an order-dependent sequence; aggregation of
    tests in explicitly parallel sets
@@ -127,6 +131,17 @@ Concepts:
 
    * works
 
+ - running tests on a separate (existing) node
+
+   * implemented as {spawn, Node, Tests}: assuming a specific node
+     exists, run a set of tests on that node, rather than locally, the
+     main idea being that a number of test sets could be run in parallel
+     on separate machines (and maybe none are run locally)
+
+ - running OS commands, testing output and result values
+
+   * TODO: needed to make eunit a more general test engine
+
  - starting one or more additional nodes to run tests or suites on
 
    * TODO: this could be done by a user through the setup/teardown
@@ -134,16 +149,18 @@ Concepts:
      easier if there was some basic support for doing this with minimal
      effort.
 
-Feature ideas
--------------
+ - whole-application testing (using .app files?)
 
-Module and parent function can always be found as metadata for the fun
-itself, using erlang:fun_info/2. When no line number and no description
-exists, it would be useful to report the ordinal number of a failing
-test within its parent group (keep the counts as state of traversal).
+   * TODO: no deeper thoughts about this yet
 
-Assorted notes
---------------
+ - identification of tests within a test set (e.g., which succeeded,
+   which failed, repeating selected tests or groups of tests, etc.)
+
+   * the numbering scheme in listings take care of this point
+
+
+Assorted notes which may or may not be useful, e.g. for documentation
+---------------------------------------------------------------------
 
 Tests for exported functions of a module should preferably be in a
 separate module. This is good in many ways, but mainly boils down to
@@ -166,61 +183,34 @@ able to instantiate the environment of a set of tests when executing a
 setup, the setup must be a function which returns the test set and the
 cleanup function.
 
-A list of tests represents an order-independent set. It can be expected
-that the tests will be run in order, but it is not required and tests
-may even be executed in parallel. Labeling a set of tests does not
-change its meaning.
+A list of tests represents an order-independent set. Usually, the tests
+will be run in order, but it is not required and tests may also be
+executed in parallel if they are included in an 'inparallel'-context.
+Labeling a set of tests does not change its meaning in any way.
 
 Wrapping a set of tests in a 'setup' implies that the setup is executed,
-then _all_ the tests (those returned by the maketest fun) are executed,
+then _all_ the tests (those returned by the generator fun) are executed,
 and finally the cleanup is executed regardless of whether any tests
 failed or not. If the setup itself failed, the whole test set _and_ the
 cleanup is skipped (there is no setup-result that can be passed to the
 cleanup).
 
-Wrapping a (deep) list of maketests in a 'foreach' is equivalent to
-wrapping each individual maketest in the list in a corresponding
+Wrapping a (deep) list of generators in a 'foreach' is equivalent to
+wrapping each individual generator in the list in a corresponding
 'setup', regardless of nesting depth. E.g., foreach(a, [foreach(b, [t1,
 t2]), foreach(c, [t3, t4])]) is equivalent to [setup(a, setup(b, t1)),
 setup(a, setup(b, t2)), setup(a, setup(c, t3)), setup(a, setup(c, t4))].
 Note that 'foreach' does not distribute over 'setup', since the nesting
 level of 'setup' must be preserved.
 
-While a plain 'foreach' can be done over any set of maketests, a
-'foreach1' requires that there is a pairing of argument+maketest for
+While a plain 'foreach' can be done over any set of generators, a
+'foreach1' requires that there is a pairing of argument+generator for
 each element.
 
-Possible representations:
+See the file eunit_data.erl for a description of test representations.
 
-    Test:
-	Module := atom()
-	Fun := fun () -> ..., ok end | {ModuleName, FunctionName}
-
-	Fun
-	{Line, Fun}
-	Module
-	{"Description", Fun}
-	{"Description", Module}
-	{"Description", {Line, Fun}}
-
-    Tests:
-	Test
-	[Test]
-	{"Description", [Tests]}
-
-    Setup/Teardown
-	Setup0 := fun () -> ..., SetupResult end
-	Setup1 := fun (Arg) -> ..., SetupResult end
-	Cleanup := fun (SetupResult) -> ..., ok end
-	MakeTests := fun (SetupResult) -> Tests end
-	MakeMakeTests := fun (Arg) -> MakeTests end
-
-	{setup, Setup0, Cleanup, MakeTests}
-	{foreach, Setup, Cleanup, [MakeTests]}
-	{foreach1, Setup1, Cleanup, [{Arg, MakeMakeTests}]}
-
-Lists of tests/maketests/arg+makemaketests can all be deep, but every
-sublist must be properly terminated.
+Lists of tests/generators/arg-generator-pairs can all be deep, but every
+sublist must be a proper list, i.e., nil-terminated.
 
 Test Set Traversal Operations (traversal only - no execution here):
 
@@ -232,48 +222,29 @@ Test Set Traversal Operations (traversal only - no execution here):
      Up: leave the current group
 
 Problem: cannot browse a 'setup'-group unless you are able to instantiate
-the maketest fun, and to do that you either need the actual result from
-the 'setup' fun, or you need to know if the maketest fun expects an
+the generator fun, and to do that you either need the actual result from
+the 'setup' fun, or you need to know if the generator fun expects an
 argument matching a certain pattern, such as a 3-tuple. You could then
 pass dummy values such as 'undefined' for the components, since they
 will not be used unless you try to run one of the instantiated tests or
-a setup fun of a subgroup. If the maketest fun was an n-ary fun, instead
-of a unary one, one could use the fun-info to generate dummy arguments -
-that's not very nice, and forces you to always return a list (or tuple)
-of arguments from the setup fun, using 'apply' to pass the arguments to
-the maketest fun. Ugly.
-
-(Interesting point: using destructive update, it would simply not be
-necessary to instantiate the local environment of the maketest.)
+a setup fun of a subgroup.
 
 If there was never a fun that returned a list of tests, but only funs
 around single tests, it would be simple - just don't apply any funs
 while traversing. But then it would be necessary to wrap each test
-within a 'setup' in its own maketest fun, which would be a pain, and it
+within a 'setup' in its own generator fun, which would be a pain, and it
 would not be possible to nest 'setup' groups in an easy way (variables
 bound in the outer group would have to be explicitly passed to the
-maketest funs in the inner group, using manual closure conversion). This
+generator funs in the inner group, using manual closure conversion). This
 is simply not tolerable. So, dummy value instantiation is the only way
 to go, if it should be possible at all to browse test groups without
 executing setup/cleanup funs.
 
 Solution: a 'browser' function that tries to pass variants of dummy
 values to a fun until it either succeeds or fails with some other error
-than 'fun_clause'.
+than 'fun_clause'. This has been implemented and is the basis of the
+test listing function.
 
-If a group is being browsed, no tests can be run, and all subgroups can
-only be further Browsed, not Entered.
-
-Some notes that were moved out from the code, for now:
- - Tests are not executed in the same process as the caller, hence
-   there is at least one child process for running tests.
- - The mailbox etc. of the caller should not be affected, so we use
-   a root process as insulator between the caller and the initial
-   test process.
- - Since test processes are newly created and not known outside the
-   test framework, they do not get unexpected messages delivered to
-   their mailboxes.
- - A test process either runs one or more subtests in strict order, or
-   runs a set of child processes in parallel. A test process should
-   not be trapping signals unless it is in a state where it is waiting
-   for subtests
+When a setup-group is being browsed, its tests cannot be executed (since
+they are instantiated with dummy values), and its subgroups can only be
+further Browsed, not Entered, for the same reason.
