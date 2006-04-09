@@ -42,47 +42,52 @@
 
 start(Reference, List) ->
     St = #state{ref = Reference},
-    spawn_link(fun () -> init(List, St) end).
-
-init(List, St0) ->
     Id = [],
+    spawn_link(fun () -> init(Id, List, St) end).
+
+init(Id, List, St0) ->
     io:fwrite("=== EUnit ===\n"),
     try
-	?debugmsg1("waiting for ~w begin", [Id]),
-	{group, St1} = wait(Id, 'begin', St0),
-	?debugmsg1("got ~w begin", [Id]),
-	St2 = list(List, St1),
-	?debugmsg1("waiting for ~w end", [Id]),
-	{_Time, St3} = wait(Id, 'end', St2),
-	?debugmsg1("got ~w end after ~w ms", [Id, _Time]),
-	St3
+	with_abort(Id, fun () -> top(Id, List, St0) end)
     of
-	St ->
-	    ?debugmsg1("top list done: ~w", [St]),
-	    Reference = St#state.ref,
-	    %% @TODO FIXME: report and if possible count aborted tests!
-	    receive
-		{stop, Reference, ReplyTo} ->
-		    io:fwrite("================================\n"
-			      "  Failed: ~w.  Succeeded: ~w.\n",
-			      [St#state.fail, St#state.succeed]),
-		    if St#state.abort ->
-			    io:fwrite("\n*** the testing was "
-				      "prematurely aborted *** \n");
-		       true ->
-			    ok
-		    end,
-		    Result = if (St#state.fail > 0) or St#state.abort -> error;
-				true -> ok
-			     end,
-		    ReplyTo ! {result, Reference, Result},
-		    ok
-	    end
+	St -> done(St)
     catch
 	_Class:_Term ->
 	    _Trace = erlang:get_stacktrace(),
 	    ?debugmsg1("top list crashed: ~w", [{_Class,_Term,_Trace}]),
 	    erlang:raise(_Class, _Term, _Trace)
+    end.
+
+top(Id, List, St0) ->
+    ?debugmsg1("waiting for ~w begin", [Id]),
+    {group, St1} = wait(Id, 'begin', St0),
+    ?debugmsg1("got ~w begin", [Id]),
+    St2 = list(List, St1),
+    ?debugmsg1("waiting for ~w end", [Id]),
+    {_Time, St3} = wait(Id, 'end', St2),
+    ?debugmsg1("got ~w end after ~w ms", [Id, _Time]),
+    St3.
+
+done(St) ->
+    ?debugmsg1("top list done: ~w", [St]),
+    Reference = St#state.ref,
+    %% @TODO FIXME: report and if possible count aborted tests!
+    receive
+	{stop, Reference, ReplyTo} ->
+	    io:fwrite("================================\n"
+		      "  Failed: ~w.  Succeeded: ~w.\n",
+		      [St#state.fail, St#state.succeed]),
+	    if St#state.abort ->
+		    io:fwrite("\n*** the testing was "
+			      "prematurely aborted *** \n");
+	       true ->
+		    ok
+	    end,
+	    Result = if (St#state.fail > 0) or St#state.abort -> error;
+			true -> ok
+		     end,
+	    ReplyTo ! {result, Reference, Result},
+	    ok
     end.
 
 %% Notes:
@@ -149,7 +154,7 @@ entry({item, Id, Desc, Test}, St) ->
 			St2#state{fail = St2#state.fail + 1}
 		end
 	end,
-    with_abort(Id, F, fun (St) -> St end);
+    with_abort(Id, F);
 entry({group, Id, Desc, Es1}, St) ->
     ?debugmsg1("group: ~w", [Id]),
     F = fun () ->
@@ -175,17 +180,17 @@ entry({group, Id, Desc, Es1}, St) ->
 		end,
 		St4#state{indent = I}
 	end,
-    with_abort(Id, F, fun (St) -> St end).
+    with_abort(Id, F).
 
 abort(Id, St) ->
     ?debugmsg1("aborting: ~w", [Id]),
     throw({abort, Id, St}).
 
-with_abort(Id, F, H) ->
+with_abort(Id, F) ->
     try F()
     catch
 	{abort, Id, St} ->
-	    H(St)
+	    St
     end.
 
 %% @TODO keep refining the below protocol
