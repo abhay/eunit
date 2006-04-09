@@ -30,7 +30,7 @@
 
 
 -export([dlist_next/1, uniq/1, fun_parent/1, is_string/1,
-	 browse_fun/1]).
+	 browse_fun/1, command/1, command/2, command/3]).
 
 %% Old EUnit entry points.
 -export([log/4, error/4]).
@@ -317,3 +317,60 @@ browse_fun_test_() ->
       ?_test({ok, _, 17} = browse_fun(fun ([_,_,_]) -> 17 end))
      ]}.
 -endif.
+
+
+%% ---------------------------------------------------------------------
+%% Replacement for os:cmd
+
+command(Cmd) ->
+    command(Cmd, "").
+
+command(Cmd, Dir) ->
+    command(Cmd, Dir, []).
+
+command(Cmd, Dir, Env) ->
+    CD = if Dir == "" -> [];
+	    true -> [{cd, Dir}]
+	 end,
+    SetEnv = if Env == [] -> []; 
+		true -> [{env, Env}]
+	     end,
+    Opt = CD ++ SetEnv ++ [stream, exit_status, use_stdio,
+			   stderr_to_stdout, in, eof],
+    P = open_port({spawn, Cmd}, Opt),
+    get_data(P, []).
+
+get_data(P, D) ->
+    receive
+	{P, {data, D1}} ->
+	    get_data(P, [D|D1]);
+	{P, eof} ->
+	    port_close(P),    
+	    receive
+		{P, {exit_status, N}} ->
+		    {N, lists:flatten(D)}
+	    end
+    end.
+
+-ifndef(NOTEST).
+
+cmd_test_() ->
+    [{"command execution, status, and output",
+      [?_assertCmdStatus(0, "true"),
+       ?_assertCmdStatus(1, "false"),
+       ?_assertCmd("true"),
+       ?_assertCmdOutput("hello\n", "echo hello"),
+       ?_assertCmdOutput("hello", "echo -n hello"),
+       ?_test({0, "hello"} = ?_cmd_("echo -n hello"))
+      ]},
+     {"file setup and cleanup",
+      setup,
+      fun () -> ?_checkCmd("mktempo") end,
+      fun (File) -> ?_checkCmd("rm " ++ File) end,
+      fun (File) ->
+	      [?_assertCmd("echo xyzzy >" ++ File),
+	       ?_assertCmdOutput("xyzzy\n", "cat " ++ File)]
+      end}
+    ].
+
+-endif. % NOTEST

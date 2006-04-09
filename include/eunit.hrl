@@ -50,4 +50,32 @@
 -define(_assertExit(Term, Expr), ?_assertException(exit, Term, Expr)).
 -define(_assertThrow(Term, Expr), ?_assertException(throw, Term, Expr)).
 
+
+%% macros for running operating system commands
+
+-define(_cmd_(Cmd), (eunit_lib:command(Cmd))).
+
+%% must use a fun-application here to avoid exporting variables, and use
+%% local variable names that hopefully will not be bound outside the fun
+-define(_checkCmdStatus(N, Cmd),
+	((fun () ->
+		  case ?_cmd_(Cmd) of
+		      {(N), __Out} -> __Out;
+		      {__N, _} -> throw({status_nonzero, __N})
+		  end
+	  end)())).
+-define(_checkCmd(Cmd), ?_checkCmdStatus(0, Cmd)).
+
+-define(_assertCmdStatus(N, Cmd),
+ 	?_test(case ?_cmd_(Cmd) of
+		   {(N), _} -> ok;
+		   {_, _} -> throw(assertion_failed)
+	       end)).
+-define(_assertCmd(Cmd), ?_assertCmdStatus(0, Cmd)).
+-define(_assertCmdOutput(T, Cmd),
+ 	?_test(case ?_cmd_(Cmd) of
+		   {_, T} -> ok;
+		   {_, _} -> throw(assertion_failed)
+	       end)).
+
 -endif. % EUNIT_HRL
