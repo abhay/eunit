@@ -24,17 +24,17 @@
 %%-include("eunit_old.hrl").
 
 -define(_test(Expr), {?LINE, fun () -> (Expr), ok end}).
--define(_test1(Str, Expr), {Str, ?_test(Expr)}).
+-define(_test_(Str, Expr), {Str, ?_test(Expr)}).
 
 -define(_assert(BoolExpr),
 	?_test(case (BoolExpr) of
 		   true -> ok;
 		   false -> throw(assertion_failed)
 	       end)).
--define(_assert1(Str, BoolExpr), {Str, ?_assert(BoolExpr)}).
+-define(_assert_(Str, BoolExpr), {Str, ?_assert(BoolExpr)}).
 
 -define(_assertNot(BoolExpr), ?_assert(not (BoolExpr))).
--define(_assertNot1(Str, BoolExpr), {Str, ?_assertNot(BoolExpr)}).
+-define(_assertNot_(Str, BoolExpr), {Str, ?_assertNot(BoolExpr)}).
 
 %% Class and Term may be patterns here
 -define(_assertException(Class, Term, Expr),
