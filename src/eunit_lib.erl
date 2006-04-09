@@ -365,8 +365,8 @@ cmd_test_() ->
       ]},
      {"file setup and cleanup",
       setup,
-      fun () -> ?_checkCmd("mktempo") end,
-      fun (File) -> ?_checkCmd("rm " ++ File) end,
+      fun () -> ?_cmd("mktemp") end,
+      fun (File) -> ?_cmd("rm " ++ File) end,
       fun (File) ->
 	      [?_assertCmd("echo xyzzy >" ++ File),
 	       ?_assertCmdOutput("xyzzy\n", "cat " ++ File)]

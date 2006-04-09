@@ -57,14 +57,14 @@
 
 %% must use a fun-application here to avoid exporting variables, and use
 %% local variable names that hopefully will not be bound outside the fun
--define(_checkCmdStatus(N, Cmd),
+-define(_cmdStatus(N, Cmd),
 	((fun () ->
 		  case ?_cmd_(Cmd) of
 		      {(N), __Out} -> __Out;
 		      {__N, _} -> throw({status_nonzero, __N})
 		  end
 	  end)())).
--define(_checkCmd(Cmd), ?_checkCmdStatus(0, Cmd)).
+-define(_cmd(Cmd), ?_cmdStatus(0, Cmd)).
 
 -define(_assertCmdStatus(N, Cmd),
  	?_test(case ?_cmd_(Cmd) of
