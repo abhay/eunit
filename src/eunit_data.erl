@@ -215,6 +215,13 @@ parse({generator, F} = T) when is_function(F) ->
     end;
 parse({generator, M, F}) when is_atom(M), is_atom(F) ->
     parse({generator, eunit_test:function_wrapper(M, F)});
+parse({cmd, C} = T) ->
+    case eunit_lib:is_string(C) of
+	true ->
+	    parse(fun () -> ?_cmd(C) end);
+	false ->
+	    throw({bad_test, T})
+    end;
 parse({inorder, T}) ->
     group(#group{tests = T, order = true});
 parse({inparallel, T}) ->
