@@ -140,7 +140,7 @@ Concepts and features
 
  - running OS commands, testing output and result values
 
-   * TODO: needed to make eunit a more general test engine
+   * works
 
  - starting one or more additional nodes to run tests or suites on
 
