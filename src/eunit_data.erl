@@ -41,6 +41,7 @@
 %%          | {string(), term(), term(), term()}
 %%          | {generator, () -> tests()}
 %%          | {generator, M::moduleName(), F::functionName()}
+%%          | {cmd, C}
 %%          | {spawn, tests()}
 %%          | {spawn, Node::atom(), tests()}
 %%          | {timeout, tests()}
