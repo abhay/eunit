@@ -37,8 +37,7 @@
 
 start(Tests, Reference, Super, Order) ->
     St = init_procstate(Reference, Super, Order),
-    handle_group(#group{tests = Tests, spawn = local},
-		 St#procstate{id = []}).
+    spawn_group(local, #group{tests = Tests}, St#procstate{id = []}).
 
 init_procstate(Reference, Super, Order) ->
     #procstate{ref = Reference, super = Super, order = Order}.
