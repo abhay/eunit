@@ -104,9 +104,8 @@ start_task(Type, Fun, St0) ->
 	    %% message.
 	    Reference = St#procstate.ref,
 	    Monitor = erlang:monitor(process, Pid),
-	    %% assume that the DOWN message will arrive after any
-	    %% messages sent by the process itself... this is not
-	    %% documented, so it might not be correct. bummer.
+	    %% (the DOWN message is guaranteed to arrive after any
+	    %% messages sent by the process itself)
 	    receive
 		{ok, Reference, Pid} ->
 		    Pid;
