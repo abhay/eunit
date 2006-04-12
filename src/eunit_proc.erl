@@ -345,12 +345,10 @@ tests_inorder(I, St) ->
     end.
 
 tests_inparallel(I, N, St) ->
-    io:fwrite("*** inparallel: ~w", [N]),
     tests_inparallel(I, St, N, N, sets:new()).
 
 tests_inparallel(I, St, N, N0, Children) when N =< 0, N0 > 0 ->
     wait_for_tasks(Children, St),
-    io:fwrite("*** ~w tasks done", [N0]),
     tests_inparallel(I, St, N0, N0, sets:new());
 tests_inparallel(I, St, N, N0, Children) ->
     case get_next_item(I) of
