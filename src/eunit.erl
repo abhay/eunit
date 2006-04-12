@@ -62,14 +62,14 @@ list(T) ->
     eunit_data:list(T).
 
 test(T) ->
-    test(T, [{order, true}]).
+    test(T, [{order, inorder}]).
 
 testp(T) ->
-    test(T, [{order, false}]).
+    test(T, [{order, inparallel}]).
 
 test(T, Options) ->
     %% The default is to run tests in order unless otherwise specified
-    Order = proplists:get_bool(order, Options),
+    Order = proplists:get_value(order, Options, inorder),
     Reference = make_ref(),
     Super = eunit_tty:start(Reference, list(T)),
     Root = eunit_proc:start(T, Reference, Super, Order),

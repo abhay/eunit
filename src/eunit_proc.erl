@@ -326,8 +326,10 @@ wait_for_tasks(PidSet, St) ->
 tests(T, St) ->
     I = eunit_data:iter_init(T, St#procstate.id),
     case St#procstate.order of
-	true -> tests_inorder(I, St);
-	false -> tests_inparallel(I, St)
+	inorder -> tests_inorder(I, St);
+	inparallel -> tests_inparallel(I, 0, St);
+	{inparallel, N} when is_integer(N), N >= 0 ->
+	    tests_inparallel(I, N, St)
     end.
 
 set_id(I, St) ->
@@ -342,14 +344,20 @@ tests_inorder(I, St) ->
 	    ok
     end.
 
-tests_inparallel(I, St) ->
-    tests_inparallel(I, St, sets:new()).
+tests_inparallel(I, N, St) ->
+    io:fwrite("*** inparallel: ~w", [N]),
+    tests_inparallel(I, St, N, N, sets:new()).
 
-tests_inparallel(I, St, Children) ->
+tests_inparallel(I, St, N, N0, Children) when N =< 0, N0 > 0 ->
+    wait_for_tasks(Children, St),
+    io:fwrite("*** ~w tasks done", [N0]),
+    tests_inparallel(I, St, N0, N0, sets:new());
+tests_inparallel(I, St, N, N0, Children) ->
     case get_next_item(I) of
 	{T, I1} ->
 	    Child = spawn_item(T, set_id(I1, St)),
-	    tests_inparallel(I1, St, sets:add_element(Child, Children));
+	    tests_inparallel(I1, St, N - 1, N0,
+			     sets:add_element(Child, Children));
 	none ->
 	    wait_for_tasks(Children, St),
 	    ok

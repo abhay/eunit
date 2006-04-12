@@ -47,6 +47,7 @@
 %%          | {timeout, tests()}
 %%          | {inorder, tests()}
 %%          | {inparallel, tests()}
+%%          | {inparallel, N::integer(), tests()}
 %%          | {setup, Setup::() -> R::any(),
 %%                    Cleanup::(R::any()) -> any(),
 %%                    Instantiate::(R::any()) -> tests()
@@ -224,9 +225,11 @@ parse({cmd, C} = T) ->
 	    throw({bad_test, T})
     end;
 parse({inorder, T}) ->
-    group(#group{tests = T, order = true});
+    group(#group{tests = T, order = inorder});
 parse({inparallel, T}) ->
-    group(#group{tests = T, order = false});
+    parse({inparallel, 0, T});
+parse({inparallel, N, T}) when is_integer(N), N >= 0 ->
+    group(#group{tests = T, order = {inparallel, N}});
 parse({timeout, N, T}) when is_number(N), N >= 0 ->
     group(#group{tests = T, timeout = round(N * 1000)});
 parse({spawn, T}) ->
