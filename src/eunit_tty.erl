@@ -317,7 +317,7 @@ trie__match([], []) ->
 trie__match([], _T) ->
     no.
 
--ifndef(NOTEST).
+-ifdef(TEST).
 
 trie_test_() ->
     [{"basic representation",
@@ -376,4 +376,4 @@ trie_test_() ->
       end}
     ].
 
--endif.  % NOTEST
+-endif.  % TEST

@@ -34,7 +34,7 @@
 -include("eunit_test.hrl").
 
 
--ifndef(NOTEST).
+-ifdef(TEST).
 %% Cause all the other modules to be tested as well as this one.
 full_test_() ->
     [eunit_proc, eunit_test, eunit_lib, eunit_data, eunit_tty].

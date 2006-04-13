@@ -75,6 +75,9 @@ Concepts and features
 
    * defining the NOTEST macro is used to disable testing code; this is
      used by all the eunit header files.
+   * testing can be disabled by default by including eunit_off.hrl
+     instead of eunit.hrl, or before any other eunit header file; then,
+     defining the TEST macro externally will enable the testing code.
 
  - exporting test functions manually is annoying and easy to forget
 
@@ -167,7 +170,7 @@ separate module. This is good in many ways, but mainly boils down to
 that modifying test code should not have to imply modifying source code,
 and vice versa. At the same time, it should be possible for a module to
 export test functions for private functions, and to have these tests
-conditionally compiled (use -ifndef(NOTEST) for this).
+conditionally compiled (use -ifdef(EUNIT) or -ifdef(TEST) for this).
 
 pyunit uses 'failIf' and 'failUnless' as standard test names, and
 'assert' as a synonym for 'failUnless'. I have settled on 'assert' and

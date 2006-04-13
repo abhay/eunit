@@ -7,15 +7,10 @@
 %% @copyright 2006 Richard Carlsson
 %% @doc 
 
-%%-define(NOTEST, true).
-%%-define(DEBUG, true).
-
-
 -define(DEFAULT_TEST_SUFFIX, "_test").
 -define(DEFAULT_GENERATOR_SUFFIX, "_test_").
 -define(DEFAULT_GROUP_TIMEOUT, infinity).
 -define(DEFAULT_TEST_TIMEOUT, 5000).
-
 
 -ifdef(DEBUG).
 -define(debugmsg(S),io:fwrite("\n* ~s: ~s\n", [?MODULE,S])).

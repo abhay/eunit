@@ -58,7 +58,7 @@ run_testfun(F) ->
     end.
 
 
--ifndef(NOTEST).
+-ifdef(TEST).
 macro_test_() ->
     {"macro definitions",
      [{?LINE, fun () ->
@@ -139,7 +139,7 @@ fail(Term) ->
     throw({eunit_failure, Term}).				   
 
 
--ifndef(NOTEST).
+-ifdef(TEST).
 wrapper_test_() ->
     {"error handling in function wrapper",
      [?_assertException(throw, {module_not_found, eunit_nonexisting},

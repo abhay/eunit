@@ -26,7 +26,7 @@
 -include_lib("eunit/include/eunit.hrl").
 %%-include("eunit.hrl").
 
--ifndef(NOTEST).
+-ifdef(EUNIT).
 -compile({parse_transform, eunit_autoexport}).
 -endif.
 

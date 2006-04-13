@@ -79,7 +79,7 @@ dlist_next([], Xs) ->
     dlist_next(Xs).
 
 
--ifndef(NOTEST).
+-ifdef(TEST).
 dlist_test_() ->
     {"deep list traversal",
      [?_test_("non-list term -> singleton list",
@@ -131,7 +131,7 @@ is_string([]) ->
 is_string(_) ->
     false.
 
--ifndef(NOTEST).
+-ifdef(TEST).
 is_string_test_() ->
     {"is_string",
      [?_assert_("no non-lists",
@@ -168,7 +168,7 @@ fun_parent(F) ->
 	    list_to_atom(string:sub_string(S, 2, string:chr(S, $/) - 1))
     end.
 
--ifndef(NOTEST).
+-ifdef(TEST).
 fun_parent_test() ->
     fun_parent_test = fun_parent(fun () -> ok end).
 -endif.
@@ -181,7 +181,7 @@ uniq([X, X | Xs]) -> uniq([X | Xs]);
 uniq([X | Xs]) -> [X | uniq(Xs)];
 uniq([]) -> [].
 
--ifndef(NOTEST).
+-ifdef(TEST).
 uniq_test_() ->
     {"uniq",
      [?_assertError(function_clause, uniq(ok)),
@@ -284,7 +284,7 @@ arg_lists(N) when N >= 0, N =< 12 ->
 arg_lists(_) ->
     [].
 
--ifndef(NOTEST).
+-ifdef(TEST).
 browse_fun_test_() ->
     {"browsing funs",
      [?_assertError({badarity, {_, 1}}, browse_fun(fun () -> ok end)),
@@ -338,7 +338,7 @@ get_data(P, D) ->
 	    end
     end.
 
--ifndef(NOTEST).
+-ifdef(TEST).
 
 cmd_test_() ->
     [{"command execution, status, and output",
@@ -359,4 +359,4 @@ cmd_test_() ->
       end}
     ].
 
--endif. % NOTEST
+-endif. % TEST

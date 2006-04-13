@@ -1,4 +1,7 @@
 
+#DEBUG = -DDEBUG=true
+#TEST = -DNOTEST=true
+
 EMULATOR=beam
 # must have "eunit/ebin" as part of the path for include_lib to work, for now
 EBIN=../../eunit/ebin
@@ -29,4 +32,4 @@ clean:
 	rm -f $(OBJECTS)
 
 $(EBIN)/%.$(EMULATOR):%.erl
-	erlc -pa $(EBIN) -W $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
+	erlc -pa $(EBIN)  $(DEBUG) $(TEST) -W $(ERL_COMPILE_FLAGS) -o$(EBIN) $<

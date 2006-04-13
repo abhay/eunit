@@ -6,23 +6,31 @@
 %%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% the License for the specific language governing rights and
+%% limitations under the License.
 %%
 %% The Initial Developer of the Original Code is Richard Carlsson.''
 %%
-%% File: eunit_test.hrl
+%%     $Id:$
 %%
-%% $Id:$ 
-%%
-%% Copyright (C) 2006 Richard Carlsson
 
+%% including this file turns off testing unless explicitly turned on
+
+%% allow defining EUNIT as a synonym for defining TEST
 -ifdef(EUNIT).
+-ifndef(TEST).
+-define(TEST, true).
+-endif.
+-endif.
+
+%% set NOTEST unless TEST is defined, then read eunit.hrl
+-ifndef(TEST).
+-ifndef(NOTEST).
+-define(NOTEST, true).
+-endif.
+-endif.
 %% Since this file is normally included with include_lib, it must in its
 %% turn use include_lib to read any other header files, at least until
 %% the epp include_lib behaviour is fixed.
--include_lib("eunit/include/eunit_auto.hrl").
-%%-include("eunit_auto.hrl").
--export([test/0]).
-test() -> eunit:test(?MODULE).
--endif.
+-include_lib("eunit/include/eunit.hrl").
+%%-include("eunit.hrl").

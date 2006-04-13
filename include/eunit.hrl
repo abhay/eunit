@@ -17,6 +17,35 @@
 -ifndef(EUNIT_HRL).
 -define(EUNIT_HRL, true).
 
+%% allow defining EUNIT as a synonym for defining TEST
+-ifdef(EUNIT).
+-ifndef(TEST).
+-define(TEST, true).
+-endif.
+-endif.
+
+%% allow defining TEST to disable NOTEST, if NOTEST is used as default
+-ifdef(TEST).
+-undef(NOTEST).
+-endif.
+
+%% note that the main switch is NOTEST; however, both TEST and EUNIT may
+%% be used to check whether testing is enabled, and can be defined
+%% before this file is read to control whether NOTEST should be defined
+-ifdef(NOTEST).
+-undef(TEST).
+-undef(EUNIT).
+-else.
+-ifndef(TEST).
+-define(TEST, true).
+-endif.
+-ifndef(EUNIT).
+-define(EUNIT, true).
+-endif.
+-endif. % NOTEST
+
+%% the macros should be available even if testing is turned off
+
 -define(_test(Expr), {?LINE, fun () -> (Expr), ok end}).
 -define(_test_(Str, Expr), {Str, ?_test(Expr)}).
 
