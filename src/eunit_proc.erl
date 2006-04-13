@@ -142,7 +142,8 @@ start_task(Type, Fun, St0) ->
 %% insulators must always immediately send an {ok, Reference, self()}
 %% message to the parent as soon as it is spawned.
 
-%% @spec (Fun::() -> term(), St::#procstate{}) -> ok
+%% @spec (Type, Fun::() -> term(), St::#procstate{}) -> ok
+%%  Type = local | {remote, Node::atom()}
 
 insulator_process(Type, Fun, St0) ->
     process_flag(trap_exit, true),
