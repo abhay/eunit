@@ -14,9 +14,7 @@ SOURCES= \
 	eunit_test.erl \
 	eunit_lib.erl \
 	eunit_data.erl \
-	eunit_tty.erl \
-	eunit_old.erl \
-	eunit_examples.erl
+	eunit_tty.erl
 
 OBJECTS=$(SOURCES:%.erl=$(EBIN)/%.$(EMULATOR)) $(APP_TARGET) $(APPUP_TARGET)
 

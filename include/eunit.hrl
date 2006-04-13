@@ -17,12 +17,6 @@
 -ifndef(EUNIT_HRL).
 -define(EUNIT_HRL, true).
 
-%% Since this file is normally included with include_lib, it must in its
-%% turn use include_lib to read any other header files, at least until
-%% the epp include_lib behaviour is fixed.
--include_lib("eunit/include/eunit_old.hrl").
-%%-include("eunit_old.hrl").
-
 -define(_test(Expr), {?LINE, fun () -> (Expr), ok end}).
 -define(_test_(Str, Expr), {Str, ?_test(Expr)}).
 

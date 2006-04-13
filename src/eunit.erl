@@ -30,12 +30,6 @@
 -export([test/1, test/2, list/1]).
 -export([testp/1]). %% for development testing, not official
 
-%% Old EUnit entry point. Don't use.
--export([run/2]).
-
-%% Aaegis support. (Old entry point - don't use unless you must.)
--export([erlfilename/1]).
-
 %% Self-testing
 -include("eunit_test.hrl").
 
@@ -43,17 +37,8 @@
 -ifndef(NOTEST).
 %% Cause all the other modules to be tested as well as this one.
 full_test_() ->
-    [eunit_proc, eunit_test, eunit_lib, eunit_data, eunit_old, eunit_tty].
+    [eunit_proc, eunit_test, eunit_lib, eunit_data, eunit_tty].
 -endif.
-
-
-%% Old EUnit entry points. Avoid!
-
-run(Modules, Pattern) ->
-    eunit_old:run(Modules, Pattern).
-
-erlfilename(Erlfile) ->
-    eunit_old:erlfilename(Erlfile).
 
 
 %% New EUnit entry points

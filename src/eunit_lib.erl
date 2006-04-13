@@ -20,7 +20,6 @@
 %%   [http://user.it.uu.se/~richardc/]
 %% @private
 %% @see eunit
-%% @see eunit_old
 %% @doc Utility functions for eunit
 
 -module(eunit_lib).
@@ -32,21 +31,8 @@
 -export([dlist_next/1, uniq/1, fun_parent/1, is_string/1,
 	 browse_fun/1, command/1, command/2, command/3]).
 
-%% Old EUnit entry points.
--export([log/4, error/4]).
-
-
 %% EUnit self-testing 
 -include("eunit_test.hrl").
-
-
-%% Old EUnit entry points
-
-log(Format, Args, LongFile, Line) ->
-    eunit_old:log(Format, Args, LongFile, Line).
-
-error(Format, Args, LongFile, Line) ->
-    eunit_old:error(Format, Args, LongFile, Line).
 
 
 %% Type definitions for describing exceptions
