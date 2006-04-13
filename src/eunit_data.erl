@@ -421,7 +421,7 @@ browse_context(I, F) ->
 
 %% ---------------------------------------------------------------------
 
-%% @TODO update documentation of data structure
+%% @TODO update documentation of list data structure
 
 %% Returns a list of test info using a similar format to tests() above:
 %%
@@ -434,13 +434,10 @@ browse_context(I, F) ->
 %%   Description = string()
 %% @type lineNumber() = integer().  Proper line numbers are always >= 1.
 
-%% @TODO change error handling; only pass correct listing to user interface
+%% @throws {error, Reason::term()}
 
 list(T) ->
-    try list(T, [])
-    catch
-	{error, R} -> {error, R}
-    end.
+    list(T, []).
 
 list(T, ParentID) ->
     list_loop(iter_init(T, ParentID)).
@@ -478,5 +475,5 @@ list_context(T, ParentId) ->
  	browse_context(T, fun (T) -> list(T, ParentId) end)
     catch
  	R = instantiation_failed ->
- 	    {error, R}
+ 	    throw({error, R})
     end.

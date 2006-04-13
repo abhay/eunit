@@ -44,7 +44,10 @@ full_test_() ->
 %% New EUnit entry points
 
 list(T) ->
-    eunit_data:list(T).
+    try eunit_data:list(T)
+    catch
+	{error, R} -> {error, R}
+    end.
 
 test(T) ->
     test(T, [{order, inorder}]).
@@ -56,9 +59,14 @@ test(T, Options) ->
     %% The default is to run tests in order unless otherwise specified
     Order = proplists:get_value(order, Options, inorder),
     Reference = make_ref(),
-    Super = eunit_tty:start(Reference, list(T)),
-    Root = eunit_proc:start(T, Reference, Super, Order),
-    wait(Reference, Root, Super).
+    try eunit_data:list(T) of
+	List ->
+	    Super = eunit_tty:start(Reference, List),
+	    Root = eunit_proc:start(T, Reference, Super, Order),
+	    wait(Reference, Root, Super)
+    catch
+	{error, R} -> {error, R}
+    end.
 
 %% @TODO better system for setting up and waiting for tests and interface
 
