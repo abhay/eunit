@@ -69,6 +69,7 @@ test(T, Options) ->
     end.
 
 %% @TODO better system for setting up and waiting for tests and interface
+%% @TODO make a logger process to capture all events
 
 wait(Reference, Root, Front) ->
     receive
