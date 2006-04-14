@@ -46,14 +46,19 @@
 
 %% the macros should be available even if testing is turned off
 
+-undef(assert).
+-undef(assertNot).
+-define(assert(BoolExpr),
+	(case (BoolExpr) of
+	     true -> ok;
+	     false -> throw(assertion_failed)
+	 end)).
+-define(assertNot(BoolExpr), ?assert(not (BoolExpr))).
+
 -define(_test(Expr), {?LINE, fun () -> (Expr), ok end}).
 -define(_test_(Str, Expr), {Str, ?_test(Expr)}).
 
--define(_assert(BoolExpr),
-	?_test(case (BoolExpr) of
-		   true -> ok;
-		   false -> throw(assertion_failed)
-	       end)).
+-define(_assert(BoolExpr), ?_test(?assert(BoolExpr))).
 -define(_assert_(Str, BoolExpr), {Str, ?_assert(BoolExpr)}).
 
 -define(_assertNot(BoolExpr), ?_assert(not (BoolExpr))).
