@@ -23,11 +23,15 @@
 
 -module(eunit).
 
+%% @TODO make a logger process to capture all events unconditionally
+
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
 
--export([test/1, test/2, list/1]).
+-export([start/0, stop/0, test/1, test/2, test/3, list/1, submit/1,
+	 submit/2, submit/3]).
+
 -export([testp/1]). %% for development testing, not official
 
 %% Self-testing
@@ -41,7 +45,13 @@ full_test_() ->
 -endif.
 
 
-%% New EUnit entry points
+%% EUnit entry points
+
+start() ->
+    eunit_server:start(?SERVER).
+
+stop() ->
+    eunit_server:stop(?SERVER).
 
 list(T) ->
     try eunit_data:list(T)
@@ -56,34 +66,34 @@ testp(T) ->
     test(T, [{order, inparallel}]).
 
 test(T, Options) ->
-    %% The default is to run tests in order unless otherwise specified
-    Order = proplists:get_value(order, Options, inorder),
-    Reference = make_ref(),
-    try eunit_data:list(T) of
-	List ->
-	    Super = eunit_tty:start(Reference, List),
-	    Root = eunit_proc:start(T, Reference, Super, Order),
-	    wait(Reference, Root, Super)
-    catch
+    test(?SERVER, T, Options).
+
+test(Server, T, Options) ->
+    Front = eunit_tty:start(eunit_data:list(T)),
+    case eunit_server:start_test(Server, Front, T, Options) of
+	{ok, Reference} ->
+	    receive
+		{done, Reference} ->
+		    Front ! {stop, self(), Reference},
+		    receive 
+			{result, Reference, Result} ->
+			    Result
+		    end
+	    end;
 	{error, R} -> {error, R}
     end.
 
-%% @TODO better system for setting up and waiting for tests and interface
-%% @TODO make a logger process to capture all events
+submit(T) ->
+    submit(T, []).
 
-wait(Reference, Root, Front) ->
-    receive
-	{done, Reference, Root} ->
-	    ?debugmsg("*** received done message from Root process\n"),
-	    done(Reference, Front)
-%%    ; _Other ->
-%% 	    ?debugmsg1("Unexpected message: ~w.", [_Other]),
-%% 	    wait(Reference, Root, Front)
-    end.
+submit(T, Options) ->
+    submit(?SERVER, T, Options).
 
-done(Reference, Front) ->
-    Front ! {stop, Reference, self()},
-    receive 
-	{result, Reference, Result} ->
-	    Result
-    end.
+submit(Server, T, Options) ->
+    Dummy = spawn(fun devnull/0),
+    eunit_server:start_test(Server, Dummy, T, Options).
+
+%% TODO: make a proper logger for asynchronous execution with submit/3
+
+devnull() ->
+    receive _ -> devnull() end.

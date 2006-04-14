@@ -26,21 +26,24 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([start/4]).
+-export([start/3]).
 
 
 -record(procstate, {ref, id, super, insulator, parent, order}).
 
 
-%% spawns test process and returns the process Pid; sends {done,
-%% Reference, Pid} to caller when finished
+%% Spawns test process and returns the process Pid; sends {done,
+%% Reference, Pid} to caller when finished. See the function
+%% wait_for_task/2 for details about the need for the reference.
 
-start(Tests, Reference, Super, Order) ->
-    St = init_procstate(Reference, Super, Order),
-    spawn_group(local, #group{tests = Tests}, St#procstate{id = []}).
-
-init_procstate(Reference, Super, Order) ->
-    #procstate{ref = Reference, super = Super, order = Order}.
+start(Tests, Order, Super) when is_pid(Super) ->
+    Reference = make_ref(),
+    St = #procstate{ref = Reference,
+		    id = [],
+		    super = Super,
+		    order = Order},
+    Pid = spawn_group(local, #group{tests = Tests}, St),
+    {Reference, Pid}.
 
 
 %% @TODO implement synchronized mode for insulator/child execution
@@ -296,8 +299,10 @@ abort_task(Reason) ->
 %%
 %% The unique reference guarantees that we don't extract any message
 %% from the mailbox unless it belongs to the test framework (and not to
-%% the running tests). When the wait-loop terminates, no such message
-%% should remain in the mailbox.
+%% the running tests) - it is not possible to use selective receive to
+%% match only messages tagged with some pid in a dynamically varying set
+%% of pids. When the wait-loop terminates, no such message should remain
+%% in the mailbox.
 
 wait_for_task(Pid, St) ->
     wait_for_tasks(sets:from_list([Pid]), St).

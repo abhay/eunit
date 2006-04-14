@@ -13,6 +13,7 @@ ERL_COMPILE_FLAGS += -I$(INCLUDE) +warn_unused_vars +nowarn_shadow_vars +warn_un
 SOURCES= \
 	eunit_autoexport.erl \
 	eunit.erl \
+	eunit_server.erl \
 	eunit_proc.erl \
 	eunit_test.erl \
 	eunit_lib.erl \

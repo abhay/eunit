@@ -443,7 +443,7 @@ list(T, ParentID) ->
     list_loop(iter_init(T, ParentID)).
 
 list_loop(I) ->
-    case iter_next(I, fun (R) -> throw({error, R}) end) of
+    case iter_next(I, fun (R) -> throw(R) end) of
  	{T, I1} ->
 	    Id = iter_id(I1),
  	    case T of
@@ -475,5 +475,5 @@ list_context(T, ParentId) ->
  	browse_context(T, fun (T) -> list(T, ParentId) end)
     catch
  	R = instantiation_failed ->
- 	    throw({error, R})
+ 	    throw(R)
     end.

@@ -28,20 +28,19 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([start/2]).
+-export([start/1]).
 
 %% EUnit self-testing 
 -include("eunit_test.hrl").
 
--record(state, {ref,
-		succeed = 0,
+-record(state, {succeed = 0,
 		fail = 0,
 		abort = false,
 		indent = 0,
 		cancelled = trie__new()}).
 
-start(Reference, List) ->
-    St = #state{ref = Reference},
+start(List) ->
+    St = #state{},
     Id = [],
     spawn_link(fun () -> init(Id, List, St) end).
 
@@ -70,10 +69,9 @@ top(Id, List, St0) ->
 
 done(St) ->
     ?debugmsg1("top list done: ~w", [St]),
-    Reference = St#state.ref,
-    %% @TODO FIXME: report and if possible count aborted tests!
+    %% @TODO report and if possible count aborted tests!
     receive
-	{stop, Reference, ReplyTo} ->
+	{stop, ReplyTo, Reference} ->
 	    io:fwrite("================================\n"
 		      "  Failed: ~w.  Succeeded: ~w.\n",
 		      [St#state.fail, St#state.succeed]),

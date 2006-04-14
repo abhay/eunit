@@ -7,6 +7,7 @@
 %% @copyright 2006 Richard Carlsson
 %% @doc 
 
+-define(SERVER, eunit_server).
 -define(DEFAULT_TEST_SUFFIX, "_test").
 -define(DEFAULT_GENERATOR_SUFFIX, "_test_").
 -define(DEFAULT_GROUP_TIMEOUT, infinity).
