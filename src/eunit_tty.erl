@@ -21,7 +21,7 @@
 %% @see eunit
 %% @doc Text-based frontend for EUnit
 
-%% @TODO cleanup and define the protocol for frontend processes
+%% @TODO less verbose mode by default
 
 -module(eunit_tty).
 

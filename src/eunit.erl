@@ -83,6 +83,10 @@ test(Server, T, Options) ->
 	{error, R} -> {error, R}
     end.
 
+%% TODO: functions that run tests on a given node, not a given server
+%% TODO: maybe some functions could check for a globally registered server?
+%% TODO: some synchronous but completely quiet interface function
+
 submit(T) ->
     submit(T, []).
 
