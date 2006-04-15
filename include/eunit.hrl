@@ -52,10 +52,8 @@
 %% prefixed with "__", that hopefully will not be bound outside the fun.
 
 -undef(assert).
--undef(assertNot).
 -ifdef(NOTEST).
 -define(assert(BoolExpr),ok).
--define(assertNot(BoolExpr),ok).
 -else.
 %% The assert macro is written the way it is so as not to cause warnings
 %% for clauses that cannot match, even if the expression is a constant.
@@ -69,8 +67,8 @@
 				     end})
 	    end
 	  end)())).
--define(assertNot(BoolExpr), ?assert(not (BoolExpr))).
 -endif.
+-define(assertNot(BoolExpr), ?assert(not (BoolExpr))).
 
 -define(_test(Expr), {?LINE, fun () -> (Expr) end}).
 -define(_test_(Str, Expr), {Str, ?_test(Expr)}).
@@ -112,30 +110,52 @@
 -define(_assertExit(Term, Expr), ?_assertException(exit, Term, Expr)).
 -define(_assertThrow(Term, Expr), ?_assertException(throw, Term, Expr)).
 
+%% Macros for running operating system commands. (Note that these
+%% require EUnit to be present at runtime, or at least eunit_lib.)
 
-%% macros for running operating system commands
-
+%% these can be used for simply running commands in a controlled way
 -define(_cmd_(Cmd), (eunit_lib:command(Cmd))).
-
--define(_cmdStatus(N, Cmd),
+-define(cmdStatus(N, Cmd),
 	((fun () ->
-		  case ?_cmd_(Cmd) of
-		      {(N), __Out} -> __Out;
-		      {__N, _} -> erlang:error({status_nonzero, __N})
-		  end
+	    case ?_cmd_(Cmd) of
+		{(N), __Out} -> __Out;
+		{__N, _} -> erlang:error({command_failed, (??Cmd),
+					  {expected_status,(N)},
+					  {status,__N}})
+	    end
 	  end)())).
--define(_cmd(Cmd), ?_cmdStatus(0, Cmd)).
+-define(_cmdStatus(N, Cmd), ?_test(?cmdStatus(N, Cmd))).
+-define(cmd(Cmd), ?cmdStatus(0, Cmd)).
+-define(_cmd(Cmd), ?_test(?cmd(Cmd))).
 
--define(_assertCmdStatus(N, Cmd),
- 	?_test(case ?_cmd_(Cmd) of
-		   {(N), _} -> ok;
-		   {_, _} -> erlang:error(assertion_failed)
-	       end)).
--define(_assertCmd(Cmd), ?_assertCmdStatus(0, Cmd)).
--define(_assertCmdOutput(T, Cmd),
- 	?_test(case ?_cmd_(Cmd) of
-		   {_, T} -> ok;
-		   {_, _} -> erlang:error({assertion_failed, ??Cmd})
-	       end)).
+%% these are only used for testing; they always return 'ok' on success,
+%% and have no effect if testing is turned off
+-ifdef(NOTEST).
+-define(assertCmdStatus(N, Cmd),ok).
+-else.
+-define(assertCmdStatus(N, Cmd),
+ 	((fun () ->
+	    case ?_cmd_(Cmd) of
+		{(N), _} -> ok;
+		{__N, _} -> erlang:error({assertCmd_failed, (Cmd),
+					  {expected_status,(N)},
+					  {status,__N}})
+	    end
+	  end)())).
+-define(assertCmdOutput(T, Cmd),
+ 	((fun () ->
+	    case ?_cmd_(Cmd) of
+		{_, (T)} -> ok;
+		{_, __T} -> erlang:error({assertCmdOutput_failed, (Cmd),
+					  {expected_output,(T)},
+					  {output,__T}})
+	    end
+	  end)())).
+-endif.
+-define(assertCmd(Cmd), ?assertCmdStatus(0, Cmd)).
+
+-define(_assertCmdStatus(N, Cmd), ?_test(?assertCmdStatus(N, Cmd))).
+-define(_assertCmd(Cmd), ?_test(?assertCmd(Cmd))).
+-define(_assertCmdOutput(T, Cmd), ?_test(?assertCmdOutput(T, Cmd))).
 
 -endif. % EUNIT_HRL

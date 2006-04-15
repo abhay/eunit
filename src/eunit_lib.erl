@@ -342,17 +342,18 @@ get_data(P, D) ->
 
 cmd_test_() ->
     [{"command execution, status, and output",
-      [?_assertCmdStatus(0, "true"),
+      [?_test({0, "hello\n"} = ?_cmd_("echo hello")),
+       ?_cmd("echo hello"),
+       ?_assertCmdStatus(0, "true"),
        ?_assertCmdStatus(1, "false"),
        ?_assertCmd("true"),
        ?_assertCmdOutput("hello\n", "echo hello"),
-       ?_assertCmdOutput("hello", "echo -n hello"),
-       ?_test({0, "hello"} = ?_cmd_("echo -n hello"))
+       ?_assertCmdOutput("hello", "echo -n hello")
       ]},
      {"file setup and cleanup",
       setup,
-      fun () -> ?_cmd("mktemp") end,
-      fun (File) -> ?_cmd("rm " ++ File) end,
+      fun () -> ?cmd("mktemp") end,
+      fun (File) -> ?cmd("rm " ++ File) end,
       fun (File) ->
 	      [?_assertCmd("echo xyzzy >" ++ File),
 	       ?_assertCmdOutput("xyzzy\n", "cat " ++ File)]
