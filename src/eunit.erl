@@ -54,9 +54,7 @@ stop() ->
     eunit_server:stop(?SERVER).
 
 watch(Target) ->
-    Pid = auto_start(),
-    auto_watch(Pid, Target),
-    Pid.
+    eunit_server:watch(?SERVER, Target).
 
 list(T) ->
     try eunit_data:list(T)
@@ -106,40 +104,3 @@ submit(Server, T, Options) ->
 
 devnull() ->
     receive _ -> devnull() end.
-
-
-%% prototype for automatic testing using code watcher service
-%% TODO: maybe move this into eunit server itself?
-
-auto_start() ->
-    spawn_link(fun auto/0).
-
-auto() ->
-    eunit_code:subscribe(self()),
-    auto(sets:new()).
-
-auto_watch(Pid, M) ->
-    Pid ! {add, M},
-    ok.
-
-auto(Modules) ->
-    receive
-	{code_watcher, {loaded, M}} ->
-	    case sets:is_element(M, Modules) of
-		true ->
-		    auto_test(M);
-		false -> 
-		    ok
-	    end,
-	    auto(Modules);
-	{add, M} ->
-	    auto(sets:add_element(M, Modules));
-%% 	{delete, M} ->
-%% 	    auto(sets:del_element(M, Modules));
-	_ ->
-	    auto(Modules)
-    end.
-
-auto_test(M) ->
-    receive after 800 -> ok end,
-    spawn(fun () -> test(M) end).

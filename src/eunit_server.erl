@@ -23,7 +23,7 @@
 
 -module(eunit_server).
 
--export([start/1, stop/1, start_test/4]).
+-export([start/1, stop/1, start_test/4, watch/2]).
 
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
@@ -38,6 +38,9 @@ stop(Server) ->
 start_test(Server, Super, T, Options) ->
     command(Server, {test, Super, T, Options}).
 
+%% @TODO watching of paths (using regexps?) and applications (by name)
+watch(Server, Target) ->
+    command(Server, {watch, Target}).
 
 %% This makes sure the server is started before sending the command, and
 %% returns {ok, Result} if the server accepted the command or {error,
@@ -103,10 +106,12 @@ server_start(Name, Parent) ->
 	    exit(error)
     end.
 
--record(state, {name, stopped}).
+-record(state, {name, stopped, watch}).
 
 server_init(Name) ->
-    server_loop(dict:new(), #state{stopped = false, name = Name}).
+    server_loop(dict:new(), #state{stopped = false,
+				   name = Name,
+				   watch = sets:new()}).
 
 server_loop(Jobs, St) ->
     server_check_exit(Jobs, St),
@@ -116,8 +121,16 @@ server_loop(Jobs, St) ->
 	{command, From, _Cmd} when St#state.stopped ->
 	    From ! {self(), stopped};
 	{command, From, Cmd} ->
-	    server_command(From, Cmd, Jobs, St)
-    end.    
+	    server_command(From, Cmd, Jobs, St);
+	{code_watcher, {loaded, M}} ->
+	    case sets:is_element(M, St#state.watch) of
+		true ->
+		    spawn(fun () -> auto_test(M) end);
+		false -> 
+		    ok
+	    end,
+	    server_loop(Jobs, St)
+    end.
 
 server_check_exit(Jobs, St) ->
     case dict:size(Jobs) of
@@ -134,6 +147,16 @@ server_command(From, stop, Jobs, St) ->
     server_command_reply(From, {error, stopped}),
     catch unregister(St#state.name),
     server_loop(Jobs, St#state{stopped = true});
+server_command(From, {watch, Target}, Jobs, St) ->
+    %% the code watcher is only started on demand
+    eunit_code:subscribe(self()),
+    server_command_reply(From, {ok, {watch, Target}}),
+    St1 = St#state{watch = sets:add_element(Target, St#state.watch)},
+    server_loop(Jobs, St1);
+server_command(From, {forget, Target}, Jobs, St) ->
+    server_command_reply(From, {ok, {forget, Target}}),
+    St1 = St#state{watch = sets:del_element(Target, St#state.watch)},
+    server_loop(Jobs, St1);
 server_command(From, Cmd, Jobs, St) ->
     server_command_reply(From, {error, {unknown_command, Cmd}}),
     server_loop(Jobs, St).
@@ -155,3 +178,8 @@ handle_done(Reference, Jobs) ->
 	error ->
 	    Jobs
     end.
+
+auto_test(M) ->
+    group_leader(whereis(user), self()),
+    receive after 800 -> ok end,
+    io:fwrite("~w\n", [eunit:test(M)]).
