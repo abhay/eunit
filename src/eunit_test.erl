@@ -63,7 +63,7 @@ macro_test_() ->
     {"macro definitions",
      [{?LINE, fun () ->
  		      {?LINE, F} = ?_test(undefined),
- 		      {ok, ok} = run_testfun(F)
+ 		      {ok, undefined} = run_testfun(F)
  	      end},
       ?_test(begin
  		 {?LINE, F} = ?_assert(true),
@@ -71,7 +71,12 @@ macro_test_() ->
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assert(false),
- 		 {error,{throw,assertion_failed,_}} = run_testfun(F)
+ 		 {error,{error,{assertion_failed,_,false},_}} = run_testfun(F)
+ 	     end),
+      ?_test(begin
+ 		 {?LINE, F} = ?_assert([]),
+ 		 {error,{error,{assertion_failed,_,{not_a_boolean,[]}},_}}
+		     = run_testfun(F)
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertNot(false),
@@ -79,7 +84,7 @@ macro_test_() ->
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertNot(true),
- 		 {error,{throw,assertion_failed,_}} = run_testfun(F)
+ 		 {error,{error,{assertion_failed,_,false},_}} = run_testfun(F)
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarith,
@@ -88,13 +93,17 @@ macro_test_() ->
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarith, ok),
- 		 {error,{throw,{unexpected_success,ok},_}} = run_testfun(F)
+ 		 {error,{error,{assertException_failed,_,
+				{expected,_},{unexpected_success,ok}},_}}
+		     = run_testfun(F)
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarg,
  						erlang:error(badarith)),
- 		 {error,{throw,{unexpected_exception,
- 				{error,badarith,_}},_}} = run_testfun(F)
+ 		 {error,{error,{assertException_failed,_,
+				{expected,_},{unexpected_exception,
+					      {error,badarith,_}}},_}}
+		     = run_testfun(F)
  	     end)
      ]}.
 -endif.

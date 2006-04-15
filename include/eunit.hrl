@@ -42,20 +42,37 @@
 -ifndef(EUNIT).
 -define(EUNIT, true).
 -endif.
--endif. % NOTEST
+-endif.
 
-%% the macros should be available even if testing is turned off
+%% The macros should be available even if testing is turned off, and
+%% should preferably not require EUnit to be present at runtime.
+%% 
+%% We must use fun-call wrappers ((fun () -> ... end)()) to avoid
+%% exporting local variables, and furthermore we only use variable names
+%% prefixed with "__", that hopefully will not be bound outside the fun.
 
 -undef(assert).
 -undef(assertNot).
+-ifdef(NOTEST).
+-define(assert(BoolExpr),ok).
+-define(assertNot(BoolExpr),ok).
+-else.
+%% The assert macro is written the way it is so as not to cause warnings
+%% for clauses that cannot match, even if the expression is a constant.
 -define(assert(BoolExpr),
-	(case (BoolExpr) of
-	     true -> ok;
-	     false -> throw(assertion_failed)
-	 end)).
+	((fun () ->
+	    case (BoolExpr) of
+		true -> ok;
+		__V -> erlang:error({assertion_failed, (??BoolExpr),
+				     case __V of false -> __V;
+					 _ -> {not_a_boolean,__V}
+				     end})
+	    end
+	  end)())).
 -define(assertNot(BoolExpr), ?assert(not (BoolExpr))).
+-endif.
 
--define(_test(Expr), {?LINE, fun () -> (Expr), ok end}).
+-define(_test(Expr), {?LINE, fun () -> (Expr) end}).
 -define(_test_(Str, Expr), {Str, ?_test(Expr)}).
 
 -define(_assert(BoolExpr), ?_test(?assert(BoolExpr))).
@@ -64,16 +81,33 @@
 -define(_assertNot(BoolExpr), ?_assert(not (BoolExpr))).
 -define(_assertNot_(Str, BoolExpr), {Str, ?_assertNot(BoolExpr)}).
 
-%% Class and Term may be patterns here
+%% Note: Class and Term are patterns, and can not be used for value.
+-ifdef(NOTEST).
+-define(assertException(Class, Term, Expr),ok).
+-else.
+-define(assertException(Class, Term, Expr),
+	((fun () ->
+	    try (Expr) of
+	        __V -> erlang:error({assertException_failed, (??Expr),
+				     {expected,(??Class)++":"++(??Term)},
+				     {unexpected_success, __V}})
+	    catch
+		Class:Term -> ok;
+	        __C:__T ->
+		    erlang:error({assertException_failed, (??Expr),
+				  {expected,(??Class)++":"++(??Term)},
+				  {unexpected_exception,
+				   {__C, __T, erlang:get_stacktrace()}}})
+	    end
+	  end)())).
+-endif.
+
+-define(assertError(Term, Expr), ?assertException(error, Term, Expr)).
+-define(assertExit(Term, Expr), ?assertException(exit, Term, Expr)).
+-define(assertThrow(Term, Expr), ?assertException(throw, Term, Expr)).
+
 -define(_assertException(Class, Term, Expr),
-	?_test(try (Expr) of
-		   Value -> throw({unexpected_success, Value})
-	       catch
-		   Class:Term -> ok;
-		   Class1:Term1 ->
-		       throw({unexpected_exception,
-			      {Class1, Term1, erlang:get_stacktrace()}})
-	       end)).
+	?_test(?assertException(Class, Term, Expr))).
 -define(_assertError(Term, Expr), ?_assertException(error, Term, Expr)).
 -define(_assertExit(Term, Expr), ?_assertException(exit, Term, Expr)).
 -define(_assertThrow(Term, Expr), ?_assertException(throw, Term, Expr)).
@@ -83,13 +117,11 @@
 
 -define(_cmd_(Cmd), (eunit_lib:command(Cmd))).
 
-%% must use a fun-application here to avoid exporting variables, and use
-%% local variable names that hopefully will not be bound outside the fun
 -define(_cmdStatus(N, Cmd),
 	((fun () ->
 		  case ?_cmd_(Cmd) of
 		      {(N), __Out} -> __Out;
-		      {__N, _} -> throw({status_nonzero, __N})
+		      {__N, _} -> erlang:error({status_nonzero, __N})
 		  end
 	  end)())).
 -define(_cmd(Cmd), ?_cmdStatus(0, Cmd)).
@@ -97,13 +129,13 @@
 -define(_assertCmdStatus(N, Cmd),
  	?_test(case ?_cmd_(Cmd) of
 		   {(N), _} -> ok;
-		   {_, _} -> throw(assertion_failed)
+		   {_, _} -> erlang:error(assertion_failed)
 	       end)).
 -define(_assertCmd(Cmd), ?_assertCmdStatus(0, Cmd)).
 -define(_assertCmdOutput(T, Cmd),
  	?_test(case ?_cmd_(Cmd) of
 		   {_, T} -> ok;
-		   {_, _} -> throw(assertion_failed)
+		   {_, _} -> erlang:error({assertion_failed, ??Cmd})
 	       end)).
 
 -endif. % EUNIT_HRL
