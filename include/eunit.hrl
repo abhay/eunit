@@ -119,7 +119,7 @@
 	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{(N), __Out} -> __Out;
-		{__N, _} -> erlang:error({command_failed, (??Cmd),
+		{__N, _} -> erlang:error({command_failed, (Cmd),
 					  {expected_status,(N)},
 					  {status,__N}})
 	    end

@@ -220,7 +220,7 @@ parse({generator, M, F}) when is_atom(M), is_atom(F) ->
 parse({cmd, C} = T) ->
     case eunit_lib:is_string(C) of
 	true ->
-	    parse(fun () -> ?_cmd(C) end);
+	    parse(fun () -> ?cmd(C) end);
 	false ->
 	    throw({bad_test, T})
     end;
