@@ -37,17 +37,18 @@
 		fail = 0,
 		abort = false,
 		indent = 0,
-		cancelled = trie__new()}).
+		cancelled = trie__new(),
+		results = dict:new()}).
 
 start(List) ->
     St = #state{},
     Id = [],
-    spawn_link(fun () -> init(Id, List, St) end).
+    spawn(fun () -> init(Id, List, St) end).
 
 init(Id, List, St0) ->
     io:fwrite("=== EUnit ===\n"),
     try
-	with_abort(Id, fun () -> top(Id, List, St0) end)
+	top(Id, List, St0)
     of
 	St -> done(St)
     catch
@@ -59,11 +60,11 @@ init(Id, List, St0) ->
 
 top(Id, List, St0) ->
     ?debugmsg1("waiting for ~w begin", [Id]),
-    {group, St1} = wait(Id, 'begin', St0),
+    {{ok, group}, St1} = wait(Id, 'begin', St0),
     ?debugmsg1("got ~w begin", [Id]),
     St2 = list(List, St1),
     ?debugmsg1("waiting for ~w end", [Id]),
-    {_Time, St3} = wait(Id, 'end', St2),
+    {{ok, {ok, _Time}}, St3} = wait(Id, 'end', St2),
     ?debugmsg1("got ~w end after ~w ms", [Id, _Time]),
     St3.
 
@@ -114,91 +115,108 @@ list([], St) ->
 
 entry({item, Id, Desc, Test}, St) ->
     ?debugmsg1("item: ~w", [Id]),
-    {Module, Name, Line} = case Test of
-			       {M, N} -> {M, N, 0};
-			       _ -> Test
-			   end,
-    F = fun () ->
-		?debugmsg1("waiting for ~w start", [Id]),
-		{test, St1} = wait(Id, 'begin', St),
-		indent(St#state.indent),
-		io:fwrite("~s:~s~s~s...",
-			  [Module, 
-			   case Line of
-			       0 -> "";
-			       L -> io_lib:fwrite("~w:", [L])
-			   end,
-			   Name,
-			   if Desc == "" -> "";
-			      true -> io_lib:fwrite(" (~s)", [Desc])
-			   end]),
-		?debugmsg1("waiting for ~w end", [Id]),
-		{{Result, Time}, St2} = wait(Id, 'end', St1),
-		?debugmsg1("got ~w end", [Id]),
-		case Result of
-		    ok ->
-			if Time > 0 ->
-				io:fwrite("[~.3f s] ", [Time/1000]);
-			   true ->
-				ok
-			end,
-			io:fwrite("ok\n"),
-			St2#state{succeed = St2#state.succeed + 1};
-		    {error, Exception} ->
-			io:fwrite("*failed*\n::~p\n\n", [Exception]),
-			St2#state{fail = St2#state.fail + 1};
-		    {skipped, Reason} ->
-			skipped(Reason),
-			St2#state{fail = St2#state.fail + 1}
-		end
-	end,
-    with_abort(Id, F);
-entry({group, Id, Desc, Es1}, St) ->
+    Where = case Test of
+		{M, N} -> {M, N, 0};
+		_ -> Test
+	    end,
+    test_begin(Id, Desc, Where, St);
+entry({group, Id, Desc, Es}, St) ->
     ?debugmsg1("group: ~w", [Id]),
-    F = fun () ->
-		?debugmsg1("waiting for ~w begin", [Id]),
-		{group, St1} = wait(Id, 'begin', St),
-		I = St1#state.indent,
-		St2 = if Desc == "" ->
-			      St1;
-			 true ->
-			      indent(I),
-			      io:fwrite("~s\n", [Desc]),
-			      St1#state{indent = I + 1}
-		      end,
-		St3 = list(Es1, St2),
-		?debugmsg1("waiting for ~w end", [Id]),
-		{Time, St4} = wait(Id, 'end', St3),
-		?debugmsg1("got ~w end", [Id]),
-		if Time > 0 ->
-			indent(St2#state.indent),
-			io:fwrite("[group done in ~.3f s]\n", [Time/1000]);
-		   true ->
-			ok
-		end,
-		St4#state{indent = I}
-	end,
-    with_abort(Id, F).
+    group_begin(Id, Desc, Es, St).
 
-abort(Id, St) ->
-    ?debugmsg1("aborting: ~w", [Id]),
-    throw({abort, Id, St}).
-
-with_abort(Id, F) ->
-    try F()
-    catch
-	{abort, Id, St} ->
-	    St
+test_begin(Id, Desc, {Module, Name, Line}, St) ->
+    ?debugmsg1("waiting for ~w start", [Id]),
+    case wait(Id, 'begin', St) of
+	{{abort, Reason}, St1} ->
+	    indent(St1#state.indent),
+	    io:fwrite("*aborted* (~w)::~p\n", [Id, Reason]),
+	    %% TODO: better handling of indentation and so forth here
+%% 	    if Type == 'end' ->
+%% 		    io:fwrite("*aborted*::~p\n", [Reason]);
+%% 	       true ->
+%% 		    ok
+%% 	    end,
+	    St1;
+	{{ok, test}, St1} ->
+	    indent(St1#state.indent),
+	    io:fwrite("~s:~s~s~s...",
+		      [Module, 
+		       case Line of
+			   0 -> "";
+			   L -> io_lib:fwrite("~w:", [L])
+		       end,
+		       Name,
+		       if Desc == "" -> "";
+			  true -> io_lib:fwrite(" (~s)", [Desc])
+		       end]),
+	    test_end(Id, St1)
     end.
 
-%% @TODO keep refining the below protocol
+test_end(Id, St) ->
+    ?debugmsg1("waiting for ~w end", [Id]),
+    case wait(Id, 'end', St) of
+	{{abort, _}, St1} ->
+	    St1;
+	{{ok, {Result, Time}}, St1} ->
+	    ?debugmsg1("got ~w end", [Id]),
+	    case Result of
+		ok ->
+		    if Time > 0 ->
+			    io:fwrite("[~.3f s] ", [Time/1000]);
+		       true ->
+			    ok
+		    end,
+		    io:fwrite("ok\n"),
+		    St1#state{succeed = St1#state.succeed + 1};
+		{error, Exception} ->
+		    io:fwrite("*failed*\n::~p\n\n", [Exception]),
+		    St1#state{fail = St1#state.fail + 1};
+		{skipped, SkipReason} ->
+		    io:fwrite("*did not run*\n::~s\n\n",
+			      [format_skip_reason(SkipReason)]),
+		    St1#state{fail = St1#state.fail + 1}
+	    end
+    end.
+
+group_begin(Id, Desc, Es, St) ->
+    ?debugmsg1("waiting for ~w begin", [Id]),
+    case wait(Id, 'begin', St) of
+	{{abort, _}, St1} ->
+	    St1;
+	{{ok, group}, St1} ->
+	    I = St1#state.indent,
+	    St2 = if Desc == "" ->
+			  St1;
+		     true ->
+			  indent(I),
+			  io:fwrite("~s\n", [Desc]),
+			  St1#state{indent = I + 1}
+		  end,
+	    group_end(Id, I, list(Es, St2))
+    end.
+
+group_end(Id, I, St) ->
+    ?debugmsg1("waiting for ~w end", [Id]),
+    case wait(Id, 'end', St) of
+	{{abort, _}, St1} ->
+	    St1;
+	{{ok, {ok, Time}}, St1} ->
+	    ?debugmsg1("got ~w end", [Id]),
+	    if Time > 0 ->
+		    indent(St1#state.indent),
+		    io:fwrite("[group done in ~.3f s]\n", [Time/1000]);
+	       true ->
+		    ok
+	    end,
+	    St1#state{indent = I}
+    end.
 
 wait(Id, Type, St) ->
     case check_cancelled(Id, St) of
 	no ->
 	    receive
 		{status, SomeId, {cancel, Cause}} ->
-		    %% @TODO FIXME: proper handling/reporting of exit causes
+		    %% @TODO proper reporting of exit causes (not here)
 		    case Cause of
 			timeout ->
 			    ?debugmsg1("*** ~w: timeout - test process killed by insulator\n", [SomeId]);
@@ -211,48 +229,47 @@ wait(Id, Type, St) ->
 			{abort, _Reason} ->
 			    ?debugmsg1("*** ~w: test process aborted: ~P.\n", [SomeId, _Reason, 15])
 		    end,
-		    wait(Id, Type, set_cancelled(SomeId, St));
+		    wait(Id, Type, set_cancelled(SomeId, Cause, St));
 		{status, Id, {progress, {Type, Data}}} ->
-		    {Data, St}
+		    {{ok, Data}, St}
 %%  	      ; _Other ->
 %%  		    ?debugmsg1("Unexpected message: ~w when Id = ~w.", [_Other, Id]),
 %%  		    wait(Id, Type, St)
 	    end;
-	_ ->
-	    %% TODO: better handling of indentation and so forth here
-	    if Type == 'end' ->
-		    io:fwrite("*aborted*\n");
-	       true ->
-		    ok
-	    end,
-	    abort(Id, St)
+	{yes, Reason} ->
+	    {{abort, Reason}, St}
     end.
 
-set_cancelled(Id, St) ->
-    St#state{cancelled = trie__store(Id, St#state.cancelled)}.
+set_cancelled(Id, Cause, St) ->
+    St1 = St#state{cancelled = trie__store(Id, St#state.cancelled)},
+    set_result(Id, {cancelled, Cause}, St1).
 
 check_cancelled(Id, St) ->
-    trie__match(Id, St#state.cancelled).
-
-skipped(Reason) ->
-    case Reason of
-	{module_not_found, M} ->
-	    skip_msg("missing module: ~w", [M]);
-	{no_such_function, {M,F,A}} ->
-	    skip_msg("no such function: ~w:~w/~w", [M,F,A]);
-	{error, Exception} ->
-	    skip_msg("internal error: ~p", [Exception])
+    case trie__match(Id, St#state.cancelled) of
+	no -> no;
+	_ -> {yes, case dict:find(Id, St#state.results) of
+		       {ok, Result} -> Result;
+		       error -> undefined
+		   end}
     end.
 
-skip_msg(Str, Args) ->
-    Msg = io_lib:format(Str, Args),
-    io:fwrite("** did not run **\n::~s\n\n", [Msg]).
+set_result(Id, Result, St) ->
+    St#state{results = dict:store(Id, Result, St#state.results)}.
+
+format_skip_reason(Reason) ->
+    case Reason of
+	{module_not_found, M} ->
+	    io_lib:format("missing module: ~w", [M]);
+	{no_such_function, {M,F,A}} ->
+	    io_lib:format("no such function: ~w:~w/~w", [M,F,A])
+    end.
 
 indent(N) when is_integer(N), N >= 1 ->
     io:put_chars(lists:duplicate(N * 2, $\s));
 indent(_) ->
     ok.
 
+%% @TODO put these messages back in use
 %% aborted(Reason) ->
 %%     case Reason of
 %% 	setup_failed ->

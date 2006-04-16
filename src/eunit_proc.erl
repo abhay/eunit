@@ -393,8 +393,10 @@ handle_test(T, St) ->
     progress_message({'end', {Status, Time}}, St),
     ok.
 
-%% @spec (#test{}) -> {ok, Value} | {error, eunit_lib:exception()}
-%% @throws eunit_test:wrapperError()
+%% @spec (#test{}) ->
+%%   ok | {error, eunit_lib:exception()} | {skipped, SkipReason}
+%% SkipReason = {module_not_found, moduleName()}
+%%            | {no_such_function, mfa()}
 
 run_test(#test{f = F}) ->
     try eunit_test:run_testfun(F) of
@@ -406,7 +408,7 @@ run_test(#test{f = F}) ->
     catch
 	R = {module_not_found, _M} ->
 	    {skipped, R};
-	  R = {no_such_function, _MFA} ->
+	R = {no_such_function, _MFA} ->
 	    {skipped, R}
     end.
 
@@ -437,10 +439,10 @@ enter_group(T, St) ->
 
 run_group(T, Timeout, St) ->
     progress_message({'begin', group}, St),
-    {Value, Time} = with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
-				 fun () -> tests(T, St) end, St),
-    progress_message({'end', Time}, St),
-    Value.
+    {_ , Time} = with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
+			      fun () -> tests(T, St) end, St),
+    progress_message({'end', {ok, Time}}, St),
+    ok.
 
 with_context(#group{context = undefined, tests = T}, F) ->
     F(T);
