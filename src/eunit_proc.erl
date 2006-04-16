@@ -183,16 +183,16 @@ insulator_wait(Child, Parent, St) ->
 	    status_message(Id, {progress, Msg}, St),
 	    insulator_wait(Child, Parent, St);
 	{abort, Child, Id, Reason} ->
-	    self_status_message(Id, {abort, Reason}, St),
+	    cancelling_messages(Id, {abort, Reason}, St),
 	    %% no need to wait for the {'EXIT',Child,_} message
 	    terminate_insulator(St);
 	{timeout, Child, Id} ->
-	    self_status_message(Id, timeout, St),
+	    cancelling_messages(Id, timeout, St),
 	    kill_task(Child, St);
 	{'EXIT', Child, normal} ->
 	    terminate_insulator(St);
 	{'EXIT', Child, Reason} ->
-	    self_status_message(St#procstate.id, {exit, Reason}, St),
+	    cancelling_messages(St#procstate.id, {exit, Reason}, St),
 	    terminate_insulator(St);
 	{'EXIT', Parent, _} ->
 	    %% make sure child processes are cleaned up recursively
@@ -215,15 +215,14 @@ progress_message(Msg, St) ->
 status_message(Id, Msg, St) ->
     St#procstate.super ! {status, Id, Msg}.
 
-%% send status messages for the Id of the "causing" item, and also for
-%% the Id of the insulator itself, if they are different
-self_status_message(Id, Msg0, St) ->
-    %% note that the most specific Id is always sent first
-    Msg = {cancel, Msg0},
-    status_message(Id, Msg, St),
+%% send cancel-status messages for the Id of the "causing" item, and
+%% also for the Id of the insulator itself, if they are different
+cancelling_messages(Id, Cause, St) ->
+    %% the message for the most specific Id is always sent first
+    status_message(Id, {cancel, Cause}, St),
     case St#procstate.id of
 	Id -> ok;
-	Id1 -> status_message(Id1, Msg, St)
+	Id1 -> status_message(Id1, {cancel, {blame, Id}}, St)
     end.
 
 %% Unlinking before exit avoids polluting the parent process with exit

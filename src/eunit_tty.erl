@@ -204,6 +204,8 @@ wait(Id, Type, St) ->
 			    ?debugmsg1("*** ~w: timeout - test process killed by insulator\n", [SomeId]);
 			{startup, _Reason} ->
 			    ?debugmsg1("*** ~w: could not start test process: ~P.\n", [SomeId, _Reason, 15]);
+			{blame, _SubId} ->
+			    ?debugmsg1("*** ~w: cancelled because of: ~w.\n", [SomeId, _SubId]);
 			{exit, _Reason} ->
 			    ?debugmsg1("*** ~w: test process died suddenly: ~P.\n", [SomeId, _Reason, 15]);
 			{abort, _Reason} ->
@@ -217,6 +219,12 @@ wait(Id, Type, St) ->
 %%  		    wait(Id, Type, St)
 	    end;
 	_ ->
+	    %% TODO: better handling of indentation and so forth here
+	    if Type == 'end' ->
+		    io:fwrite("*aborted*\n");
+	       true ->
+		    ok
+	    end,
 	    abort(Id, St)
     end.
 
