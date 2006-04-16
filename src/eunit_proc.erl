@@ -183,30 +183,41 @@ insulator_wait(Child, Parent, St) ->
 	    status_message(Id, {progress, Msg}, St),
 	    insulator_wait(Child, Parent, St);
 	{abort, Child, Id, Reason} ->
-	    exit_message(Id, {abort, Reason}, St),
+	    self_status_message(Id, {abort, Reason}, St),
 	    %% no need to wait for the {'EXIT',Child,_} message
 	    terminate_insulator(St);
 	{timeout, Child, Id} ->
-	    exit_message(Id, timeout, St),
+	    self_status_message(Id, timeout, St),
 	    kill_task(Child, St);
 	{'EXIT', Child, normal} ->
 	    terminate_insulator(St);
 	{'EXIT', Child, Reason} ->
-	    exit_message(St#procstate.id, {exit, Reason}, St),
+	    self_status_message(St#procstate.id, {exit, Reason}, St),
 	    terminate_insulator(St);
 	{'EXIT', Parent, _} ->
 	    %% make sure child processes are cleaned up recursively
 	    kill_task(Child, St)
     end.
 
+%% Child processes send all messages via the insulator to ensure proper
+%% sequencing with timeouts and exit signals.
+
+abort_message(Reason, St) ->
+    St#procstate.insulator ! {abort, self(), St#procstate.id, Reason}.
+
+progress_message(Msg, St) ->
+    St#procstate.insulator ! {progress, self(), St#procstate.id, Msg}.
+
+%% Status messages from the insulator to the supervisor. (A supervisor
+%% does not have to act on these messages - it can e.g. just log them,
+%% or even discard them.)
+
 status_message(Id, Msg, St) ->
     St#procstate.super ! {status, Id, Msg}.
 
 %% send status messages for the Id of the "causing" item, and also for
 %% the Id of the insulator itself, if they are different
-
-%% TODO: this function naming is not very good. too many similar names.
-exit_message(Id, Msg0, St) ->
+self_status_message(Id, Msg0, St) ->
     %% note that the most specific Id is always sent first
     Msg = {cancel, Msg0},
     status_message(Id, Msg, St),
@@ -229,14 +240,7 @@ kill_task(Child, St) ->
     exit(Child, kill),
     terminate_insulator(St).
 
-%% Note that child processes send all messages via the insulator to
-%% ensure proper sequencing with timeouts and exit signals.
-
-abort_message(Reason, St) ->
-    St#procstate.insulator ! {abort, self(), St#procstate.id, Reason}.
-
-progress_message(Msg, St) ->
-    St#procstate.insulator ! {progress, self(), St#procstate.id, Msg}.
+%% Timeout handling
 
 set_timeout(Time, St) ->
     erlang:send_after(Time, St#procstate.insulator,
