@@ -72,8 +72,10 @@ test(T, Options) ->
     test(?SERVER, T, Options).
 
 test(Server, T, Options) ->
-    Front = eunit_tty:start(eunit_data:list(T)),
-    case eunit_server:start_test(Server, Front, T, Options) of
+    List = eunit_data:list(T),
+    Front = eunit_tty:start(List),
+    Serial = eunit_serial:start(List, [Front]),
+    case eunit_server:start_test(Server, Serial, T, Options) of
 	{ok, Reference} ->
 	    receive
 		{done, Reference} ->
@@ -104,3 +106,6 @@ submit(Server, T, Options) ->
 
 devnull() ->
     receive _ -> devnull() end.
+
+
+

@@ -23,7 +23,8 @@
 
 -module(eunit_test).
 
--export([run_testfun/1, function_wrapper/2]).
+-export([run_testfun/1, function_wrapper/2, enter_context/4,
+	 browse_context/2]).
 
 
 -include("eunit.hrl").
@@ -167,6 +168,71 @@ wrapper_test_exported_() ->
 
 
 %% ---------------------------------------------------------------------
+%% Entering a setup-context, with guaranteed cleanup.
+
+%% @spec (Setup, Cleanup, Instantiate, Callback) -> any()
+%%    Setup = () -> any()
+%%    Cleanup = (any()) -> any()
+%%    Instantiate = (any()) -> tests()
+%%    Callback = (tests()) -> any()
+%% @throws {ErrorType, eunit_lib:exception()}
+%% ErrorType = setup_failed | instantiation_failed | cleanup_failed
+
+%% Note: if this function is moved, renamed, or gets a different number
+%% of arguments, the function eunit_test:prune_trace/2 must be updated
+%% correspondingly.
+
+enter_context(Setup, Cleanup, Instantiate, Callback) ->
+    try Setup() of
+	R ->
+	    try Instantiate(R) of
+		T ->
+		    try Callback(T)  %% call back to client code
+		    after
+			%% Always run cleanup; client may be an idiot
+			try Cleanup(R)
+			catch
+			    Class:Term ->
+				context_failure(cleanup_failed,
+						Class, Term)
+			end
+		    end
+	    catch
+		Class:Term ->
+		    context_failure(instantiation_failed, Class, Term)
+	    end
+    catch
+	Class:Term ->
+	    context_failure(setup_failed, Class, Term)
+    end.
+
+context_failure(Type, Class, Term) ->
+    throw({Type, {Class, Term, get_stacktrace()}}).
+
+%% Instantiates a context with dummy values to make browsing possible
+%% @throws {instantiation_failed, eunit_lib:exception()}
+
+%% Note: if this function is moved, renamed, or gets a different number
+%% of arguments, the function eunit_test:prune_trace/2 must be updated
+%% correspondingly.
+
+browse_context(I, F) ->
+    %% Browse: dummy setup/cleanup and a wrapper for the instantiator
+    S = fun () -> ok end,
+    C = fun (_) -> ok end,
+    I1 = fun (_) ->
+		try eunit_lib:browse_fun(I) of
+		    {_, T} -> T
+		catch
+		    Class:Term ->
+			context_failure(instantiation_failed, Class,
+					Term)
+		end
+	 end,
+    enter_context(S, C, I1, F).
+
+
+%% ---------------------------------------------------------------------
 %% Getting a cleaned up stack trace. (We don't want it to include
 %% eunit's own internal functions. This complicates self-testing
 %% somewhat, but you can't have everything.)
@@ -178,6 +244,10 @@ get_stacktrace(Ts) ->
     eunit_lib:uniq(prune_trace(erlang:get_stacktrace(), Ts)).
 
 prune_trace([{eunit_test, run_testfun, 1} | _Rest], Tail) ->
+    Tail;
+prune_trace([{eunit_test, enter_context, 4} | _Rest], Tail) ->
+    Tail;
+prune_trace([{eunit_test, browse_context, 2} | _Rest], Tail) ->
     Tail;
 prune_trace([T | Ts], Tail) ->
     [T | prune_trace(Ts, Tail)];

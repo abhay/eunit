@@ -203,7 +203,7 @@ uniq_test_() ->
 %% No exceptions will be thrown unless the function actually crashes for
 %% some other reason than being unable to match the argument.
 
-%% @spec (F::(any()) -> any()) -> {ok, Value::any(), Result::any()} | error
+%% @spec (F::(any()) -> any()) -> {Value::any(), Result::any()}
 
 browse_fun(F) ->
     browse_fun(F, arg_values()).
@@ -213,7 +213,7 @@ browse_fun(F, Next) ->
 	[V | Next1] ->
 	    case try_apply(F, V) of
 		{ok, Result} ->
-		    {ok, V, Result};
+		    {V, Result};
 		{error, function_clause} ->
 		    browse_fun(F, Next1);
 		{error, badarity} ->
@@ -222,7 +222,8 @@ browse_fun(F, Next) ->
 		    erlang:raise(Class, Reason, Trace)
 	    end;
 	[] ->
-	    error
+	    %% tried everything - this ought to provoke an error
+	    F(undefined)
     end.
 
 %% Apply argument to function and report whether it succeeded (and with
@@ -290,18 +291,19 @@ browse_fun_test_() ->
     {"browsing funs",
      [?_assertError({badarity, {_, 1}}, browse_fun(fun () -> ok end)),
       ?_assertError({badarity, {_, 1}}, browse_fun(fun (_,_) -> ok end)),
-      ?_test({ok, _, 17} = browse_fun(fun (_) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun (undefined) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun (ok) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun (true) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ({}) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ({_}) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ({_,_}) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ({_,_,_}) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ([]) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ([_]) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ([_,_]) -> 17 end)),
-      ?_test({ok, _, 17} = browse_fun(fun ([_,_,_]) -> 17 end))
+      ?_assertError(function_clause, browse_fun(fun (42) -> ok end)),
+      ?_test({_, 17} = browse_fun(fun (_) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun (undefined) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun (ok) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun (true) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ({}) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ({_}) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ({_,_}) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ({_,_,_}) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ([]) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ([_]) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ([_,_]) -> 17 end)),
+      ?_test({_, 17} = browse_fun(fun ([_,_,_]) -> 17 end))
      ]}.
 -endif.
 

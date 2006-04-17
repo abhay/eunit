@@ -33,12 +33,11 @@
 %% EUnit self-testing 
 -include("eunit_test.hrl").
 
+
 -record(state, {succeed = 0,
 		fail = 0,
-		abort = false,
-		indent = 0,
-		cancelled = eunit_lib:trie_new(),
-		results = dict:new()}).
+		cancel = 0,
+		indent = 0}).
 
 start(List) ->
     St = #state{},
@@ -47,251 +46,181 @@ start(List) ->
 
 init(Id, List, St0) ->
     io:fwrite("=== EUnit ===\n"),
-    try
-	top(Id, List, St0)
-    of
-	St -> done(St)
-    catch
-	_Class:_Term ->
-	    _Trace = erlang:get_stacktrace(),
-	    ?debugmsg1("top list crashed: ~w", [{_Class,_Term,_Trace}]),
-	    erlang:raise(_Class, _Term, _Trace)
-    end.
-
-top(Id, List, St0) ->
-    ?debugmsg1("waiting for ~w begin", [Id]),
-    {{ok, group}, St1} = wait(Id, 'begin', St0),
-    ?debugmsg1("got ~w begin", [Id]),
-    St2 = list(List, St1),
-    ?debugmsg1("waiting for ~w end", [Id]),
-    {{ok, {ok, _Time}}, St3} = wait(Id, 'end', St2),
-    ?debugmsg1("got ~w end after ~w ms", [Id, _Time]),
-    St3.
-
-done(St) ->
-    ?debugmsg1("top list done: ~w", [St]),
+    St = group_begin(Id, "", List, St0),
+    ?debugmsg1("top list done; waiting for stop message: ~w", [St]),
     %% @TODO report and if possible count aborted tests!
     receive
 	{stop, ReplyTo, Reference} ->
 	    io:fwrite("================================\n"
 		      "  Failed: ~w.  Succeeded: ~w.\n",
 		      [St#state.fail, St#state.succeed]),
-	    if St#state.abort ->
-		    io:fwrite("\n*** the testing was "
-			      "prematurely aborted *** \n");
-	       true ->
-		    ok
-	    end,
-	    Result = if (St#state.fail > 0) or St#state.abort -> error;
+	    Result = if St#state.fail > 0 -> error;
 			true -> ok
 		     end,
 	    ReplyTo ! {result, Reference, Result},
 	    ok
     end.
 
-%% Notes:
-%% * A cancelling event may arrive at any time, and may concern items we
-%% are not yet expecting (if tests are executed in parallel), or may
-%% concern not only the current item but possibly a group ancestor of
-%% the current item (as in the case of a group timeout).
-%% 
-%% * It is not possible to use selective receive to extract only those
-%% cancelling messages that affect the current item and its parents;
-%% basically, because we cannot have a dynamically computed prefix as a
-%% pattern in a receive. Hence, we must extract each cancelling event as
-%% it arrives and keep track of them separately.
-%% 
-%% * Before we wait for a new item, we must check whether it (and thus
-%% also all its subitems, if any) is already cancelled.
-%% 
-%% * When a new cancelling event arrives, we must either store it for
-%% future use, and/or cancel the current item and possibly one or more
-%% of its parent groups.
-
-list([E | Es], St) ->
-    list(Es, entry(E, St));
-list([], St) ->
-    St.
+wait(Id, St) ->
+    receive
+	{status, Id, Data} -> {Data, St}
+    end.
 
 entry({item, Id, Desc, Test}, St) ->
-    ?debugmsg1("item: ~w", [Id]),
-    Where = case Test of
-		{M, N} -> {M, N, 0};
-		_ -> Test
-	    end,
-    test_begin(Id, Desc, Where, St);
+    test_begin(Id, Desc, Test, St);
 entry({group, Id, Desc, Es}, St) ->
-    ?debugmsg1("group: ~w", [Id]),
     group_begin(Id, Desc, Es, St).
 
+tests([E | Es], St) ->
+    tests(Es, entry(E, St));
+tests([], St) ->
+    St.
+
+test_begin(Id, Desc, {Module, Name}, St) ->
+    test_begin(Id, Desc, {Module, Name, 0}, St);
 test_begin(Id, Desc, {Module, Name, Line}, St) ->
-    ?debugmsg1("waiting for ~w start", [Id]),
-    case wait(Id, 'begin', St) of
-	{{abort, Reason}, St1} ->
-	    indent(St1#state.indent),
-	    io:fwrite("*aborted* (~w)::~p\n", [Id, Reason]),
-	    %% TODO: better handling of indentation and so forth here
-%% 	    if Type == 'end' ->
-%% 		    io:fwrite("*aborted*::~p\n", [Reason]);
-%% 	       true ->
-%% 		    ok
-%% 	    end,
-	    St1;
-	{{ok, test}, St1} ->
-	    indent(St1#state.indent),
-	    io:fwrite("~s:~s~s~s...",
-		      [Module, 
-		       case Line of
-			   0 -> "";
-			   L -> io_lib:fwrite("~w:", [L])
-		       end,
-		       Name,
-		       if Desc == "" -> "";
-			  true -> io_lib:fwrite(" (~s)", [Desc])
-		       end]),
-	    test_end(Id, St1)
+    print_test_begin(St#state.indent, Module, Name, Line, Desc),
+    case wait(Id, St) of
+	{{progress, {'begin', test}}, St1} ->
+	    test_end(Id, St1);
+	{{cancel, Reason}, St1} ->
+	    print_test_cancel(Reason),
+	    St1#state{cancel = St1#state.cancel + 1}
     end.
 
 test_end(Id, St) ->
-    ?debugmsg1("waiting for ~w end", [Id]),
-    case wait(Id, 'end', St) of
-	{{abort, _}, St1} ->
-	    St1;
-	{{ok, {Result, Time}}, St1} ->
-	    ?debugmsg1("got ~w end", [Id]),
-	    case Result of
-		ok ->
-		    if Time > 0 ->
-			    io:fwrite("[~.3f s] ", [Time/1000]);
-		       true ->
-			    ok
-		    end,
-		    io:fwrite("ok\n"),
+    case wait(Id, St) of
+	{{progress, {'end', {Result, Time}}}, St1} ->
+	    if Result == ok ->
+		    print_test_end(Time),
 		    St1#state{succeed = St1#state.succeed + 1};
-		{error, Exception} ->
-		    io:fwrite("*failed*\n::~p\n\n", [Exception]),
-		    St1#state{fail = St1#state.fail + 1};
-		{skipped, SkipReason} ->
-		    io:fwrite("*did not run*\n::~s\n\n",
-			      [format_skip_reason(SkipReason)]),
-		    St1#state{fail = St1#state.fail + 1}
-	    end
-    end.
-
-group_begin(Id, Desc, Es, St) ->
-    ?debugmsg1("waiting for ~w begin", [Id]),
-    case wait(Id, 'begin', St) of
-	{{abort, _}, St1} ->
-	    St1;
-	{{ok, group}, St1} ->
-	    I = St1#state.indent,
-	    St2 = if Desc == "" ->
-			  St1;
-		     true ->
-			  indent(I),
-			  io:fwrite("~s\n", [Desc]),
-			  St1#state{indent = I + 1}
-		  end,
-	    group_end(Id, I, list(Es, St2))
-    end.
-
-group_end(Id, I, St) ->
-    ?debugmsg1("waiting for ~w end", [Id]),
-    case wait(Id, 'end', St) of
-	{{abort, _}, St1} ->
-	    St1;
-	{{ok, {ok, Time}}, St1} ->
-	    ?debugmsg1("got ~w end", [Id]),
-	    if Time > 0 ->
-		    indent(St1#state.indent),
-		    io:fwrite("[group done in ~.3f s]\n", [Time/1000]);
 	       true ->
-		    ok
+		    print_test_error(Result),
+		    St1#state{fail = St1#state.fail + 1}
+	    end;
+	{{cancel, Reason}, St1} ->
+	    print_test_cancel(Reason),
+	    St1#state{cancel = St1#state.cancel + 1}
+    end.
+
+group_begin(Id, Desc, Es, St0) ->
+    I = St0#state.indent,
+    St = if Desc == "" -> St0;
+	    true ->
+		 print_group_start(I, Desc),
+		 St0#state{indent = I + 1}
+	 end,
+    case wait(Id, St) of
+	{{progress, {'begin', group}}, St1} ->
+	    group_end(Id, I, tests(Es, St1));
+	{{cancel, Reason}, St1} ->
+	    if Desc == "" -> ok;
+	       true ->
+		    print_group_cancel(I, Reason)
 	    end,
 	    St1#state{indent = I}
     end.
 
-wait(Id, Type, St) ->
-    case check_cancelled(Id, St) of
-	no ->
-	    receive
-		{status, SomeId, {cancel, Cause}} ->
-		    %% @TODO proper reporting of exit causes (not here)
-		    case Cause of
-			timeout ->
-			    ?debugmsg1("*** ~w: timeout - test process killed by insulator\n", [SomeId]);
-			{startup, _Reason} ->
-			    ?debugmsg1("*** ~w: could not start test process: ~P.\n", [SomeId, _Reason, 15]);
-			{blame, _SubId} ->
-			    ?debugmsg1("*** ~w: cancelled because of: ~w.\n", [SomeId, _SubId]);
-			{exit, _Reason} ->
-			    ?debugmsg1("*** ~w: test process died suddenly: ~P.\n", [SomeId, _Reason, 15]);
-			{abort, _Reason} ->
-			    ?debugmsg1("*** ~w: test process aborted: ~P.\n", [SomeId, _Reason, 15])
-		    end,
-		    wait(Id, Type, set_cancelled(SomeId, Cause, St));
-		{status, Id, {progress, {Type, Data}}} ->
-		    {{ok, Data}, St}
-%%  	      ; _Other ->
-%%  		    ?debugmsg1("Unexpected message: ~w when Id = ~w.", [_Other, Id]),
-%%  		    wait(Id, Type, St)
-	    end;
-	{yes, Reason} ->
-	    {{abort, Reason}, St}
-    end.
-
-set_cancelled(Id, Cause, St) ->
-    St1 = St#state{cancelled = eunit_lib:trie_store(Id,
-						    St#state.cancelled)},
-    set_result(Id, {cancelled, Cause}, St1).
-
-check_cancelled(Id, St) ->
-    case eunit_lib:trie_match(Id, St#state.cancelled) of
-	no -> no;
-	_ -> {yes, case dict:find(Id, St#state.results) of
-		       {ok, Result} -> Result;
-		       error -> undefined
-		   end}
-    end.
-
-set_result(Id, Result, St) ->
-    St#state{results = dict:store(Id, Result, St#state.results)}.
-
-format_skip_reason(Reason) ->
-    case Reason of
-	{module_not_found, M} ->
-	    io_lib:format("missing module: ~w", [M]);
-	{no_such_function, {M,F,A}} ->
-	    io_lib:format("no such function: ~w:~w/~w", [M,F,A])
-    end.
+group_end(Id, I, St) ->
+    (case wait(Id, St) of
+	 {{progress, {'end', {ok, Time}}}, St1} ->
+	     print_group_end(St1#state.indent, Time),
+	     St1;
+	 {{cancel, undefined}, St1} ->
+	     St1;  %% "skipped" message is not interesting here
+	 {{cancel, _Reason}, St1} ->
+	     print_group_cancel(I, _Reason),
+	     St1
+     end)#state{indent = I}.
 
 indent(N) when is_integer(N), N >= 1 ->
     io:put_chars(lists:duplicate(N * 2, $\s));
 indent(_) ->
     ok.
 
-%% @TODO put these messages back in use
-%% aborted(Reason) ->
-%%     case Reason of
-%% 	setup_failed ->
-%% 	    abort_msg("context setup failed", "", []);
-%% 	cleanup_failed ->
-%% 	    abort_msg("context cleanup failed", "", []);
-%% 	instantiation_failed ->
-%% 	    abort_msg("instantiation of subtests failed", "", []);
-%% 	{bad_test, Bad} ->
-%% 	    abort_msg("bad test descriptor", "~p", [Bad]);
-%% 	{no_such_function, {M,F,A}} ->
-%% 	    abort_msg(io_lib:format("no such function: ~w:~w/~w", [M,F,A]),
-%% 			"", []);
-%% 	{module_not_found, M} ->
-%% 	    abort_msg("test module not found", "~p", [M]);
-%% 	{generator_failed, Exception} ->
-%% 	    abort_msg("test generator failed", "~p", [Exception])
-%%     end.
+print_group_start(I, Desc) ->
+    indent(I),
+    io:fwrite("~s\n", [Desc]).
 
-%% abort_msg(Title, Str, Args) ->
-%%     Msg = io_lib:format(Str, Args),
-%%     io:fwrite("\n*** ~s ***\n::~s\n\n", [Title, Msg]).
+print_group_end(I, Time) ->
+    if Time > 0 ->
+	    indent(I),
+	    io:fwrite("[group done in ~.3f s]\n", [Time/1000]);
+       true ->
+	    ok
+    end.
 
+print_test_begin(I, Module, Name, Line, Desc) ->
+    indent(I),
+    L = if Line == 0 -> "";
+	   true -> io_lib:fwrite("~w:", [Line])
+	end,
+    D = if Desc == "" -> "";
+	   true -> io_lib:fwrite(" (~s)", [Desc])
+	end,
+    io:fwrite("~s:~s~s~s...", [Module, L, Name, D]).
 
+print_test_end(Time) ->
+    T = if Time > 0 -> io_lib:fwrite("[~.3f s] ", [Time/1000]);
+	   true -> ""
+	end,
+    io:fwrite("~sok\n", [T]).
+
+print_test_error({error, Exception}) ->
+    io:fwrite("*failed*\n::~p\n\n", [Exception]);
+print_test_error({skipped, Reason}) ->
+    io:fwrite("*did not run*\n::~s\n\n",
+	      [format_skipped(Reason)]).
+
+format_skipped({module_not_found, M}) ->
+    io_lib:format("missing module: ~w", [M]);
+format_skipped({no_such_function, {M,F,A}}) ->
+    io_lib:format("no such function: ~w:~w/~w", [M,F,A]).    
+
+print_test_cancel(Reason) ->
+    io:fwrite(format_cancel(Reason)).
+
+print_group_cancel(_I, {blame, _}) ->
+    ok;
+print_group_cancel(I, Reason) ->
+    indent(I),
+    io:fwrite(format_cancel(Reason)).
+
+format_cancel(undefined) ->
+    "*skipped*\n";
+format_cancel(timeout) ->
+    "*timed out*\n";
+format_cancel({startup, Reason}) ->
+    io_lib:fwrite("*could not start test process*\n::~P\n\n",
+		  [Reason, 15]);
+format_cancel({blame, _SubId}) ->
+    "*cancelled because of subtask*\n";
+format_cancel({exit, Reason}) ->
+    io_lib:fwrite("*unexpected termination of test process*\n::~P\n\n",
+		  [Reason, 15]);
+format_cancel({abort, Reason}) ->
+    aborted(Reason).
+
+aborted(Reason) ->
+    case Reason of
+	{setup_failed, Exception} ->
+	    cancel_msg("context setup failed", "~p", [Exception]);
+ 	{cleanup_failed, Exception} ->
+ 	    cancel_msg("context cleanup failed", "~p", [Exception]);
+ 	{instantiation_failed, Exception} ->
+ 	    cancel_msg("instantiation of subtests failed", "~p",
+		       [Exception]);
+ 	{bad_test, Bad} ->
+ 	    cancel_msg("bad test descriptor", "~p", [Bad]);
+ 	{no_such_function, {M,F,A}} ->
+ 	    cancel_msg(io_lib:format("no such function: ~w:~w/~w", [M,F,A]),
+		      "", []);
+ 	{module_not_found, M} ->
+ 	    cancel_msg("test module not found", "~p", [M]);
+ 	{generator_failed, Exception} ->
+ 	    cancel_msg("test generator failed", "~p", [Exception])
+    end.
+
+cancel_msg(Title, Str, Args) ->
+    Msg = io_lib:format(Str, Args),
+    io_lib:fwrite("*** ~s ***\n::~s\n\n", [Title, Msg]).

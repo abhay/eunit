@@ -182,17 +182,20 @@ insulator_wait(Child, Parent, St) ->
 	{progress, Child, Id, Msg} ->
 	    status_message(Id, {progress, Msg}, St),
 	    insulator_wait(Child, Parent, St);
+	{cancel, Child, Id, Reason} ->
+	    status_message(Id, {cancel, Reason}, St),
+	    insulator_wait(Child, Parent, St);
 	{abort, Child, Id, Reason} ->
-	    cancelling_messages(Id, {abort, Reason}, St),
+	    exit_messages(Id, {abort, Reason}, St),
 	    %% no need to wait for the {'EXIT',Child,_} message
 	    terminate_insulator(St);
 	{timeout, Child, Id} ->
-	    cancelling_messages(Id, timeout, St),
+	    exit_messages(Id, timeout, St),
 	    kill_task(Child, St);
 	{'EXIT', Child, normal} ->
 	    terminate_insulator(St);
 	{'EXIT', Child, Reason} ->
-	    cancelling_messages(St#procstate.id, {exit, Reason}, St),
+	    exit_messages(St#procstate.id, {exit, Reason}, St),
 	    terminate_insulator(St);
 	{'EXIT', Parent, _} ->
 	    %% make sure child processes are cleaned up recursively
@@ -205,6 +208,9 @@ insulator_wait(Child, Parent, St) ->
 abort_message(Reason, St) ->
     St#procstate.insulator ! {abort, self(), St#procstate.id, Reason}.
 
+cancel_message(Msg, St) ->
+    St#procstate.insulator ! {cancel, self(), St#procstate.id, Msg}.
+
 progress_message(Msg, St) ->
     St#procstate.insulator ! {progress, self(), St#procstate.id, Msg}.
 
@@ -215,9 +221,9 @@ progress_message(Msg, St) ->
 status_message(Id, Msg, St) ->
     St#procstate.super ! {status, Id, Msg}.
 
-%% send cancel-status messages for the Id of the "causing" item, and
-%% also for the Id of the insulator itself, if they are different
-cancelling_messages(Id, Cause, St) ->
+%% send cancel messages for the Id of the "causing" item, and also for
+%% the Id of the insulator itself, if they are different
+exit_messages(Id, Cause, St) ->
     %% the message for the most specific Id is always sent first
     status_message(Id, {cancel, Cause}, St),
     case St#procstate.id of
@@ -421,7 +427,7 @@ handle_group(T, St0) ->
     St = set_group_order(T, St0),
     case T#group.spawn of
 	undefined ->
-	    enter_group(T, St);
+	    run_group(T, St);
 	Type ->
 	    Child = spawn_group(Type, T, St),
 	    wait_for_task(Child, St)
@@ -429,31 +435,38 @@ handle_group(T, St0) ->
 
 spawn_group(Type, T, St0) ->
     Fun = fun (St) ->
-		  fun () -> enter_group(T, St) end
+		  fun () -> run_group(T, St) end
 	  end,
     start_task(Type, Fun, St0).
 
-enter_group(T, St) ->
+run_group(T, St) ->
+    %% note that the setup/cleanup is outside the group timeout; if the
+    %% setup fails, we do not start any timers
     Timeout = T#group.timeout,
-    with_context(T, fun (T) -> run_group(T, Timeout, St) end).
-
-run_group(T, Timeout, St) ->
     progress_message({'begin', group}, St),
-    {_ , Time} = with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
-			      fun () -> tests(T, St) end, St),
-    progress_message({'end', {ok, Time}}, St),
-    ok.
+    F = fun (T) -> enter_group(T, Timeout, St) end,
+    case with_context(T, F) of
+	{ok, {Status, Time}} ->
+	    progress_message({'end', {Status, Time}}, St),
+	    ok;
+	{error, Reason} ->
+	    cancel_message({abort, Reason}, St),
+	    error
+    end.
+
+enter_group(T, Timeout, St) ->
+    with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
+		 fun () -> tests(T, St) end, St).
 
 with_context(#group{context = undefined, tests = T}, F) ->
-    F(T);
+    {ok, F(T)};
 with_context(#group{context = #context{} = C, tests = I}, F) ->
     try
-	eunit_data:enter_context(C, I, F)
+	{ok, eunit_data:enter_context(C, I, F)}
     catch
-	R = setup_failed ->
-	    abort_task(R);
-	  R = cleanup_failed ->
-	    abort_task(R);
-	  R = instantiation_failed ->
-	    abort_task(R)
+	{Type, _Exception} = Term
+	  when Type == setup_failed;
+	       Type == instantiation_failed;
+	       Type == cleanup_failed ->
+	    {error, Term}
     end.

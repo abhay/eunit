@@ -27,7 +27,7 @@
 -include("eunit_internal.hrl").
 
 -export([list/1, iter_init/2, iter_next/2, iter_prev/2, iter_id/1, 
-	 enter_context/3, browse_context/2]).
+	 enter_context/3]).
 
 -import(lists, [foldr/3]).
 
@@ -371,52 +371,11 @@ get_module_tests(M) ->
 %% @spec (Tests::#context{}, Instantiate, Callback) -> any()
 %%    Instantiate = (any()) -> tests()
 %%    Callback = (tests()) -> any()
-%% @throws setup_failed | instantiation_failed | cleanup_failed
+%% @throws {ErrorType, eunit_lib:exception()}
+%% ErrorType = setup_failed | instantiation_failed | cleanup_failed
 
 enter_context(#context{setup = S, cleanup = C}, I, F) ->
-    enter_context(S, C, I, F).
-
-enter_context(Setup, Cleanup, Instantiate, Callback) ->
-    try Setup() of
-	R ->
-	    try Instantiate(R) of
-		T ->
-		    try Callback(T)  %% call back to client code
-		    after
-			%% Always run cleanup; client may be an idiot
-			try Cleanup(R)
-			catch
-			    _:_ -> throw(cleanup_failed)
-			end
-		    end
-	    catch
-		_:_ ->
-		    throw(instantiation_failed)
-	    end
-    catch
-	_:_ ->
-	    throw(setup_failed)
-    end.
-
-%% Instantiates a context with dummy values to make browsing possible
-%% @throws instantiation_failed
-
-browse_context(I, F) ->
-    %% Browse: dummy setup/cleanup and a wrapper for the instantiator
-    S = fun () -> ok end,
-    C = fun (_) -> ok end,
-    I1 = fun (_) ->
-		try eunit_lib:browse_fun(I) of
-		    {ok, _, T} ->
-			T;
-		    error ->
-			throw(instantiation_failed)
-		catch
-		    _:_ ->
-			throw(instantiation_failed)
-		end
-	 end,
-    enter_context(S, C, I1, F).
+    eunit_test:enter_context(S, C, I, F).
 
 
 %% ---------------------------------------------------------------------
@@ -472,7 +431,7 @@ desc_string(S) -> S.
 
 list_context(T, ParentId) ->
     try
- 	browse_context(T, fun (T) -> list(T, ParentId) end)
+ 	eunit_test:browse_context(T, fun (T) -> list(T, ParentId) end)
     catch
  	R = instantiation_failed ->
  	    throw(R)
