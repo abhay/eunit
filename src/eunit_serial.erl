@@ -71,6 +71,8 @@ entry(Type, Id, Body, St) ->
 		     true -> St1
 		  end,
 	    case wait(Id, 'end', St2) of
+		{{cancel, undefined}, St3} ->
+		    cast({status, Id, {cancel, undefined}}, St3);
 		{{_, Msg1}, St3} ->
 		    cast(Msg1, St3)
 	    end
