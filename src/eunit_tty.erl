@@ -37,7 +37,7 @@
 		fail = 0,
 		abort = false,
 		indent = 0,
-		cancelled = trie__new(),
+		cancelled = eunit_lib:trie_new(),
 		results = dict:new()}).
 
 start(List) ->
@@ -241,11 +241,12 @@ wait(Id, Type, St) ->
     end.
 
 set_cancelled(Id, Cause, St) ->
-    St1 = St#state{cancelled = trie__store(Id, St#state.cancelled)},
+    St1 = St#state{cancelled = eunit_lib:trie_store(Id,
+						    St#state.cancelled)},
     set_result(Id, {cancelled, Cause}, St1).
 
 check_cancelled(Id, St) ->
-    case trie__match(Id, St#state.cancelled) of
+    case eunit_lib:trie_match(Id, St#state.cancelled) of
 	no -> no;
 	_ -> {yes, case dict:find(Id, St#state.results) of
 		       {ok, Result} -> Result;
@@ -294,109 +295,3 @@ indent(_) ->
 %%     io:fwrite("\n*** ~s ***\n::~s\n\n", [Title, Msg]).
 
 
-%% a trie for remembering and checking least specific cancelled events
-%% (an empty list `[]' simply represents a stored empty list, i.e., all
-%% events will match, while an empty tree means that no events match)
-
-trie__new() ->
-    gb_trees:empty().
-
-trie__store([_ | _], []) ->
-    [];
-trie__store([E | Es], T) ->
-    case gb_trees:lookup(E, T) of
-	none ->
-	    if Es == [] ->
-		    %% overwrite any previous more specific pattern
-		    gb_trees:insert(E, [], T);
-	       true ->
-		    gb_trees:insert(E, trie__store(Es, gb_trees:empty()), T)
-	    end;
-	{value, []} ->
-	    T;  %% prefix already stored
-	{value, T1} ->
-	    gb_trees:update(E, trie__store(Es, T1), T)
-    end;
-trie__store([], _T) ->
-    [].
-
-trie__match([_ | _], []) ->
-    prefix;
-trie__match([E | Es], T) ->
-    case gb_trees:lookup(E, T) of
-	none ->
-	    no;
-	{value, []} ->
-	    if Es == [] ->
-		    exact;
-	       true ->
-		    prefix
-	    end;
-	{value, T1} ->
-	    trie__match(Es, T1)
-    end;
-trie__match([], []) ->
-    exact;
-trie__match([], _T) ->
-    no.
-
--ifdef(TEST).
-
-trie_test_() ->
-    [{"basic representation",
-      [?_assert(trie__new() == gb_trees:empty()),
-       ?_assert(trie__store([1], trie__new())
-		== gb_trees:insert(1, [], gb_trees:empty())),
-       ?_assert(trie__store([1,2], trie__new())
-		== gb_trees:insert(1,
-				   gb_trees:insert(2, [], gb_trees:empty()),
-				   gb_trees:empty())),
-       ?_assert([] == trie__store([1], [])),
-       ?_assert([] == trie__store([], gb_trees:empty()))
-      ]},
-     {"basic storing and matching",
-      [?_test(no = trie__match([], trie__new())),
-       ?_test(exact = trie__match([], trie__store([], trie__new()))),
-       ?_test(no = trie__match([], trie__store([1], trie__new()))),
-       ?_test(exact = trie__match([1], trie__store([1], trie__new()))),
-       ?_test(prefix = trie__match([1,2], trie__store([1], trie__new()))),
-       ?_test(no = trie__match([1], trie__store([1,2], trie__new()))),
-       ?_test(no = trie__match([1,3], trie__store([1,2], trie__new()))),
-       ?_test(exact = trie__match([1,2,3,4,5],
-				  trie__store([1,2,3,4,5], trie__new()))),
-       ?_test(prefix = trie__match([1,2,3,4,5],
-				   trie__store([1,2,3], trie__new()))),
-       ?_test(no = trie__match([1,2,2,4,5],
-			       trie__store([1,2,3], trie__new())))
-      ]},
-     {"matching with partially overlapping patterns",
-      setup,
-      fun () ->
-	      trie__store([1,3,2], trie__store([1,2,3], trie__new()))
-      end,
-      fun (T) ->
-	      [?_test(no = trie__match([], T)),
-	       ?_test(no = trie__match([1], T)),
-	       ?_test(no = trie__match([1,2], T)),
-	       ?_test(no = trie__match([1,3], T)),
-	       ?_test(exact = trie__match([1,2,3], T)),
-	       ?_test(exact = trie__match([1,3,2], T)),
-	       ?_test(no = trie__match([1,2,2], T)),
-	       ?_test(no = trie__match([1,3,3], T)),
-	       ?_test(prefix = trie__match([1,2,3,4], T)),
-	       ?_test(prefix = trie__match([1,3,2,1], T))]
-      end},
-     {"matching with more general pattern overriding less general",
-      setup,
-      fun () -> trie__store([1], trie__store([1,2,3], trie__new())) end,
-      fun (_) -> ok end,
-      fun (T) ->
-   	      [?_test(no = trie__match([], T)),
-	       ?_test(exact = trie__match([1], T)),
- 	       ?_test(prefix = trie__match([1,2], T)),
- 	       ?_test(prefix = trie__match([1,2,3], T)),
- 	       ?_test(prefix = trie__match([1,2,3,4], T))]
-      end}
-    ].
-
--endif.  % TEST

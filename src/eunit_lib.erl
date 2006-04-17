@@ -29,7 +29,8 @@
 
 
 -export([dlist_next/1, uniq/1, fun_parent/1, is_string/1,
-	 browse_fun/1, command/1, command/2, command/3]).
+	 browse_fun/1, command/1, command/2, command/3,
+	 trie_new/0, trie_store/2, trie_match/2]).
 
 %% EUnit self-testing 
 -include("eunit_test.hrl").
@@ -361,3 +362,112 @@ cmd_test_() ->
     ].
 
 -endif. % TEST
+
+
+%% ---------------------------------------------------------------------
+%% A trie for remembering and checking least specific cancelled events
+%% (an empty list `[]' simply represents a stored empty list, i.e., all
+%% events will match, while an empty tree means that no events match).
+
+trie_new() ->
+    gb_trees:empty().
+
+trie_store([_ | _], []) ->
+    [];
+trie_store([E | Es], T) ->
+    case gb_trees:lookup(E, T) of
+	none ->
+	    if Es == [] ->
+		    %% overwrite any previous more specific pattern
+		    gb_trees:insert(E, [], T);
+	       true ->
+		    gb_trees:insert(E, trie_store(Es, gb_trees:empty()),
+				    T)
+	    end;
+	{value, []} ->
+	    T;  %% prefix already stored
+	{value, T1} ->
+	    gb_trees:update(E, trie_store(Es, T1), T)
+    end;
+trie_store([], _T) ->
+    [].
+
+trie_match([_ | _], []) ->
+    prefix;
+trie_match([E | Es], T) ->
+    case gb_trees:lookup(E, T) of
+	none ->
+	    no;
+	{value, []} ->
+	    if Es == [] -> exact;
+	       true -> prefix
+	    end;
+	{value, T1} ->
+	    trie_match(Es, T1)
+    end;
+trie_match([], []) ->
+    exact;
+trie_match([], _T) ->
+    no.
+
+-ifdef(TEST).
+
+trie_test_() ->
+    [{"basic representation",
+      [?_assert(trie_new() == gb_trees:empty()),
+       ?_assert(trie_store([1], trie_new())
+		== gb_trees:insert(1, [], gb_trees:empty())),
+       ?_assert(trie_store([1,2], trie_new())
+		== gb_trees:insert(1,
+				   gb_trees:insert(2, [],
+						   gb_trees:empty()),
+				   gb_trees:empty())),
+       ?_assert([] == trie_store([1], [])),
+       ?_assert([] == trie_store([], gb_trees:empty()))
+      ]},
+     {"basic storing and matching",
+      [?_test(no = trie_match([], trie_new())),
+       ?_test(exact = trie_match([], trie_store([], trie_new()))),
+       ?_test(no = trie_match([], trie_store([1], trie_new()))),
+       ?_test(exact = trie_match([1], trie_store([1], trie_new()))),
+       ?_test(prefix = trie_match([1,2], trie_store([1], trie_new()))),
+       ?_test(no = trie_match([1], trie_store([1,2], trie_new()))),
+       ?_test(no = trie_match([1,3], trie_store([1,2], trie_new()))),
+       ?_test(exact = trie_match([1,2,3,4,5],
+				 trie_store([1,2,3,4,5], trie_new()))),
+       ?_test(prefix = trie_match([1,2,3,4,5],
+				  trie_store([1,2,3], trie_new()))),
+       ?_test(no = trie_match([1,2,2,4,5],
+			       trie_store([1,2,3], trie_new())))
+      ]},
+     {"matching with partially overlapping patterns",
+      setup,
+      fun () ->
+	      trie_store([1,3,2], trie_store([1,2,3], trie_new()))
+      end,
+      fun (T) ->
+	      [?_test(no = trie_match([], T)),
+	       ?_test(no = trie_match([1], T)),
+	       ?_test(no = trie_match([1,2], T)),
+	       ?_test(no = trie_match([1,3], T)),
+	       ?_test(exact = trie_match([1,2,3], T)),
+	       ?_test(exact = trie_match([1,3,2], T)),
+	       ?_test(no = trie_match([1,2,2], T)),
+	       ?_test(no = trie_match([1,3,3], T)),
+	       ?_test(prefix = trie_match([1,2,3,4], T)),
+	       ?_test(prefix = trie_match([1,3,2,1], T))]
+      end},
+     {"matching with more general pattern overriding less general",
+      setup,
+      fun () -> trie_store([1], trie_store([1,2,3], trie_new())) end,
+      fun (_) -> ok end,
+      fun (T) ->
+   	      [?_test(no = trie_match([], T)),
+	       ?_test(exact = trie_match([1], T)),
+ 	       ?_test(prefix = trie_match([1,2], T)),
+ 	       ?_test(prefix = trie_match([1,2,3], T)),
+ 	       ?_test(prefix = trie_match([1,2,3,4], T))]
+      end}
+    ].
+
+-endif.  % TEST
