@@ -15,6 +15,7 @@ SOURCES= \
 	eunit.erl \
 	eunit_server.erl \
 	eunit_proc.erl \
+	eunit_serial.erl \
 	eunit_test.erl \
 	eunit_lib.erl \
 	eunit_data.erl \
