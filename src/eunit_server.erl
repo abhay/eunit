@@ -39,6 +39,8 @@ start_test(Server, Super, T, Options) ->
     command(Server, {test, Super, T, Options}).
 
 %% @TODO watching of paths (using regexps?) and applications (by name)
+%% @TODO watching of packages (e.g. using atoms 'foo.bar.*')
+
 watch(Server, Target) ->
     command(Server, {watch, Target}).
 
@@ -106,12 +108,13 @@ server_start(Name, Parent) ->
 	    exit(error)
     end.
 
--record(state, {name, stopped, watch}).
+-record(state, {name, stopped, watch_modules, watch_paths}).
 
 server_init(Name) ->
     server_loop(dict:new(), #state{stopped = false,
 				   name = Name,
-				   watch = sets:new()}).
+				   watch_modules = sets:new(),
+				   watch_paths = sets:new()}).
 
 server_loop(Jobs, St) ->
     server_check_exit(Jobs, St),
@@ -123,11 +126,9 @@ server_loop(Jobs, St) ->
 	{command, From, Cmd} ->
 	    server_command(From, Cmd, Jobs, St);
 	{code_watcher, {loaded, M}} ->
-	    case sets:is_element(M, St#state.watch) of
-		true ->
-		    spawn(fun () -> auto_test(M) end);
-		false -> 
-		    ok
+	    case is_watched(M, St) of
+		true -> spawn(fun () -> auto_test(M) end);
+		false -> ok
 	    end,
 	    server_loop(Jobs, St)
     end.
@@ -150,12 +151,12 @@ server_command(From, stop, Jobs, St) ->
 server_command(From, {watch, Target}, Jobs, St) ->
     %% the code watcher is only started on demand
     eunit_code:subscribe(self()),
+    St1 = add_watch(Target, St),
     server_command_reply(From, {ok, {watch, Target}}),
-    St1 = St#state{watch = sets:add_element(Target, St#state.watch)},
     server_loop(Jobs, St1);
 server_command(From, {forget, Target}, Jobs, St) ->
+    St1 = delete_watch(Target, St),
     server_command_reply(From, {ok, {forget, Target}}),
-    St1 = St#state{watch = sets:del_element(Target, St#state.watch)},
     server_loop(Jobs, St1);
 server_command(From, Cmd, Jobs, St) ->
     server_command_reply(From, {error, {unknown_command, Cmd}}),
@@ -188,3 +189,26 @@ auto_test(M) ->
     %% Make sure to print a dummy prompt at the end of the output, most
     %% of all so that the Emacs mode realizes that input is active.
     io:fwrite("~w\n> ", [eunit:test(M)]).
+
+%% yes, I know the below is not that solid, but it's only a prototype
+%% @TODO improve watching of paths (relative? prefixes?)
+
+add_watch(Target, St) when is_atom(Target) ->
+    St#state{watch_modules =
+	     sets:add_element(Target, St#state.watch_modules)};
+add_watch(Target, St) ->
+    St#state{watch_paths =
+	     sets:add_element(Target, St#state.watch_paths)}.
+
+delete_watch(Target, St) when is_atom(Target) ->
+    St#state{watch_modules =
+	     sets:del_element(Target, St#state.watch_modules)};
+delete_watch(Target, St) ->
+    St#state{watch_paths =
+	     sets:del_element(Target, St#state.watch_paths)}.
+
+is_watched(M, St) when is_atom(M) ->
+    sets:is_element(M, St#state.watch_modules) orelse
+	is_watched(filename:dirname(code:which(M)), St);
+is_watched(Path, St) ->
+    sets:is_element(Path, St#state.watch_paths).
