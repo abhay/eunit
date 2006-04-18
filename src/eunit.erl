@@ -73,7 +73,7 @@ test(T, Options) ->
 
 test(Server, T, Options) ->
     List = eunit_data:list(T),
-    Front = eunit_tty:start(List),
+    Front = eunit_tty:start(List, Options),
     Serial = eunit_serial:start(List, [Front]),
     case eunit_server:start_test(Server, Serial, T, Options) of
 	{ok, Reference} ->

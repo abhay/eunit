@@ -184,7 +184,7 @@ auto_test(M) ->
     receive after 800 -> ok end,
     %% Make the output start on a new line instead of on the same line
     %% as the current shell prompt.
-    io:nl(),
+    io:fwrite("\n== EUnit: testing module ~w ==\n", [M]),
     %% Make sure to print a dummy prompt at the end of the output, most
     %% of all so that the Emacs mode realizes that input is active.
     io:fwrite("~w\n> ", [eunit:test(M)]).
