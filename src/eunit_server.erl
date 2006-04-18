@@ -182,4 +182,9 @@ handle_done(Reference, Jobs) ->
 auto_test(M) ->
     group_leader(whereis(user), self()),
     receive after 800 -> ok end,
-    io:fwrite("~w\n", [eunit:test(M)]).
+    %% Make the output start on a new line instead of on the same line
+    %% as the current shell prompt.
+    io:nl(),
+    %% Make sure to print a dummy prompt at the end of the output, most
+    %% of all so that the Emacs mode realizes that input is active.
+    io:fwrite("~w\n> ", [eunit:test(M)]).
