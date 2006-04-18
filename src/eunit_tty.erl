@@ -36,7 +36,8 @@
 
 -record(state, {succeed = 0,
 		fail = 0,
-		cancel = 0,
+		abort = 0,
+		skip = 0,
 		indent = 0}).
 
 start(List) ->
@@ -45,17 +46,21 @@ start(List) ->
     spawn(fun () -> init(Id, List, St) end).
 
 init(Id, List, St0) ->
-    io:fwrite("=== EUnit ===\n"),
+    io:fwrite("========================"
+	      " EUnit "
+	      "========================\n"),
     St = group_begin(Id, "", List, St0),
-    ?debugmsg1("top list done; waiting for stop message: ~w", [St]),
-    %% @TODO report and if possible count aborted tests!
     receive
 	{stop, ReplyTo, Reference} ->
-	    io:fwrite("================================\n"
-		      "  Failed: ~w.  Succeeded: ~w.\n",
-		      [St#state.fail, St#state.succeed]),
-	    Result = if St#state.fail > 0 -> error;
-			true -> ok
+	    io:fwrite("============================"
+		      "===========================\n"
+		      "  Failed: ~w.  Aborted: ~w."
+		      "  Skipped: ~w.  Succeeded: ~w.\n",
+		      [St#state.fail, St#state.abort,
+		       St#state.skip, St#state.succeed]),
+	    Result = if St#state.fail == 0, St#state.abort == 0,
+			St#state.skip == 0 -> ok;
+			true -> error
 		     end,
 	    ReplyTo ! {result, Reference, Result},
 	    ok
@@ -85,7 +90,7 @@ test_begin(Id, Desc, {Module, Name, Line}, St) ->
 	    test_end(Id, St1);
 	{{cancel, Reason}, St1} ->
 	    print_test_cancel(Reason),
-	    St1#state{cancel = St1#state.cancel + 1}
+	    St1#state{skip = St1#state.skip + 1}
     end.
 
 test_end(Id, St) ->
@@ -100,7 +105,7 @@ test_end(Id, St) ->
 	    end;
 	{{cancel, Reason}, St1} ->
 	    print_test_cancel(Reason),
-	    St1#state{cancel = St1#state.cancel + 1}
+	    St1#state{abort = St1#state.abort + 1}
     end.
 
 group_begin(Id, Desc, Es, St0) ->
@@ -118,7 +123,8 @@ group_begin(Id, Desc, Es, St0) ->
 	       true ->
 		    print_group_cancel(I, Reason)
 	    end,
-	    St1#state{indent = I}
+	    Size = eunit_data:list_size(Es),
+	    St1#state{indent = I, skip = St1#state.skip + Size}
     end.
 
 group_end(Id, I, St) ->
@@ -128,8 +134,8 @@ group_end(Id, I, St) ->
 	     St1;
 	 {{cancel, undefined}, St1} ->
 	     St1;  %% "skipped" message is not interesting here
-	 {{cancel, _Reason}, St1} ->
-	     print_group_cancel(I, _Reason),
+	 {{cancel, Reason}, St1} ->
+	     print_group_cancel(I, Reason),
 	     St1
      end)#state{indent = I}.
 
@@ -145,7 +151,7 @@ print_group_start(I, Desc) ->
 print_group_end(I, Time) ->
     if Time > 0 ->
 	    indent(I),
-	    io:fwrite("[group done in ~.3f s]\n", [Time/1000]);
+	    io:fwrite("[done in ~.3f s]\n", [Time/1000]);
        true ->
 	    ok
     end.

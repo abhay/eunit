@@ -27,7 +27,7 @@
 -include("eunit_internal.hrl").
 
 -export([list/1, iter_init/2, iter_next/2, iter_prev/2, iter_id/1, 
-	 enter_context/3]).
+	 list_size/1, enter_context/3]).
 
 -import(lists, [foldr/3]).
 
@@ -379,18 +379,15 @@ enter_context(#context{setup = S, cleanup = C}, I, F) ->
 
 
 %% ---------------------------------------------------------------------
-
-%% @TODO update documentation of list data structure
-
-%% Returns a list of test info using a similar format to tests() above:
+%% Returns a symbolic listing of a set of tests
 %%
-%% @type testInfoList() = [{testId(), testInfo()}]
-%% @type testId() = [integer()]
-%% @type testInfo() = {moduleName(), functionName()}
-%%		    | {moduleName(), functionName(), lineNumber()}
-%%		    | {Description, testInfo()}
-%%		    | {Description, testInfoList()}
+%% @type testInfoList() = [Entry]
+%%   Entry = {item, testId(), Description, testName()}
+%%         | {group, testId(), Description, testInfoList}
 %%   Description = string()
+%% @type testId() = [integer()]
+%% @type testName() = {moduleName(), functionName()}
+%%		    | {moduleName(), functionName(), lineNumber()}
 %% @type lineNumber() = integer().  Proper line numbers are always >= 1.
 
 %% @throws {error, Reason::term()}
@@ -436,3 +433,8 @@ list_context(T, ParentId) ->
  	R = instantiation_failed ->
  	    throw(R)
     end.
+
+list_size({item, _, _, _}) -> 1;
+list_size({group, _, _, Es}) -> list_size(Es);    
+list_size(Es) when is_list(Es) ->
+    lists:foldl(fun (E, N) -> N + list_size(E) end, 0, Es).
