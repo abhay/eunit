@@ -154,7 +154,7 @@ Concepts and features
 
  - whole-application testing (using .app files?)
 
-   * TODO: no deeper thoughts about this yet
+   * TODO: think more about testing whole applications
 
  - identification of tests within a test set (e.g., which succeeded,
    which failed, repeating selected tests or groups of tests, etc.)
