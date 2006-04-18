@@ -23,7 +23,7 @@
 
 -module(eunit_server).
 
--export([start/1, stop/1, start_test/4, watch/2]).
+-export([start/1, stop/1, start_test/4, watch/2, watch_app/2]).
 
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
@@ -38,8 +38,8 @@ stop(Server) ->
 start_test(Server, Super, T, Options) ->
     command(Server, {test, Super, T, Options}).
 
-%% @TODO watching of paths (using regexps?) and applications (by name)
-%% @TODO watching of packages (e.g. using atoms 'foo.bar.*')
+watch_app(Server, Appname) ->
+    watch(Server, code:lib_dir(Appname) ++ "/ebin").
 
 watch(Server, Target) ->
     command(Server, {watch, Target}).
@@ -191,7 +191,8 @@ auto_test(M) ->
     io:fwrite("~w\n> ", [eunit:test(M)]).
 
 %% yes, I know the below is not that solid, but it's only a prototype
-%% @TODO improve watching of paths (relative? prefixes?)
+%% @TODO improve watching of paths (relative? prefixes? regexps?)
+%% @TODO watching of packages (e.g. using atoms 'foo.bar.*')
 
 add_watch(Target, St) when is_atom(Target) ->
     St#state{watch_modules =
