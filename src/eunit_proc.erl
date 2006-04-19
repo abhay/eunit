@@ -192,7 +192,6 @@ insulator_wait(Child, Parent, Buf, St) ->
 	    insulator_wait(Child, Parent, [[] | Buf], St);
 	{progress, Child, Id, 'end', {Status, Time}} ->
 	    Msg = {Status, Time, lists:reverse(hd(Buf))},
-	    io:format("Sent end result: ~p.\n", [Msg]),
 	    status_message(Id, {progress, 'end', Msg}, St),
 	    insulator_wait(Child, Parent, tl(Buf), St);
 	{cancel, Child, Id, Reason} ->
