@@ -131,7 +131,7 @@ start_task(Type, Fun, St0) ->
 	    Pid
     end.
 
-%% Simple, failure-proof insulator process
+%% Relatively simple, and hopefully failure-proof insulator process
 %% (This is cleaner than temporarily setting up the caller to trap
 %% signals, and does not affect the caller's mailbox or other state.)
 %%
@@ -156,7 +156,7 @@ insulator_process(Type, Fun, St0) ->
     end,
     St = St0#procstate{insulator = self()},
     Child = spawn_link(fun () -> child_process(Fun(St), St) end),
-    insulator_wait(Child, Parent, St).
+    insulator_wait(Child, Parent, [], St).
 
 %% Normally, child processes exit with the reason 'normal' even if the
 %% executed tests failed (by throwing exceptions), since the tests are
@@ -176,15 +176,28 @@ insulator_process(Type, Fun, St0) ->
 %% not affect the insulator compared to normal termination. Child
 %% processes can also be killed abruptly by their insulators, in case of
 %% a timeout or if a parent process dies.
+%%
+%% The insulator is the group leader for the child process, and gets all
+%% of its standard I/O. The output is buffered and associated with the
+%% currently active test or group, and is sent along with the 'end'
+%% progress message when the test or group has finished.
 
-insulator_wait(Child, Parent, St) ->
+insulator_wait(Child, Parent, Buf, St) ->
     receive
-	{progress, Child, Id, Msg} ->
-	    status_message(Id, {progress, Msg}, St),
-	    insulator_wait(Child, Parent, St);
+	{io_request, From, ReplyAs, Req} when pid(From) ->
+	    Buf1 = io_request(From, ReplyAs, Req, hd(Buf)),
+	    insulator_wait(Child, Parent, [Buf1 | tl(Buf)], St);
+	{progress, Child, Id, 'begin', Class} ->
+	    status_message(Id, {progress, 'begin', Class}, St),
+	    insulator_wait(Child, Parent, [[] | Buf], St);
+	{progress, Child, Id, 'end', {Status, Time}} ->
+	    Msg = {Status, Time, lists:reverse(hd(Buf))},
+	    io:format("Sent end result: ~p.\n", [Msg]),
+	    status_message(Id, {progress, 'end', Msg}, St),
+	    insulator_wait(Child, Parent, tl(Buf), St);
 	{cancel, Child, Id, Reason} ->
 	    status_message(Id, {cancel, Reason}, St),
-	    insulator_wait(Child, Parent, St);
+	    insulator_wait(Child, Parent, Buf, St);
 	{abort, Child, Id, Reason} ->
 	    exit_messages(Id, {abort, Reason}, St),
 	    %% no need to wait for the {'EXIT',Child,_} message
@@ -211,8 +224,9 @@ abort_message(Reason, St) ->
 cancel_message(Msg, St) ->
     St#procstate.insulator ! {cancel, self(), St#procstate.id, Msg}.
 
-progress_message(Msg, St) ->
-    St#procstate.insulator ! {progress, self(), St#procstate.id, Msg}.
+progress_message(Type, Data, St) ->
+    St#procstate.insulator ! {progress, self(), St#procstate.id,
+			      Type, Data}.
 
 %% Status messages from the insulator to the supervisor. (A supervisor
 %% does not have to act on these messages - it can e.g. just log them,
@@ -282,11 +296,13 @@ with_timeout(Time, F, St) when is_integer(Time), Time >= 0 ->
 %% processes and test whether they terminate as expected. The testing
 %% framework is not dependent on this, however, so the test code is
 %% allowed to disable signal trapping as it pleases.
+%% Note that I/O is redirected to the insulator process.
 
 %% @spec (() -> term(), #procstate{}) -> ok
 
 child_process(Fun, St) ->
     process_flag(trap_exit, true),
+    group_leader(St#procstate.insulator, self()),
     try Fun() of
 	_ -> ok
     catch
@@ -393,10 +409,10 @@ handle_item(T, St) ->
     end.
 
 handle_test(T, St) ->
-    progress_message({'begin', test}, St),
+    progress_message('begin', test, St),
     {Status, Time} = with_timeout(T#test.timeout, ?DEFAULT_TEST_TIMEOUT,
 				  fun () -> run_test(T) end, St),
-    progress_message({'end', {Status, Time}}, St),
+    progress_message('end', {Status, Time}, St),
     ok.
 
 %% @spec (#test{}) ->
@@ -443,11 +459,11 @@ run_group(T, St) ->
     %% note that the setup/cleanup is outside the group timeout; if the
     %% setup fails, we do not start any timers
     Timeout = T#group.timeout,
-    progress_message({'begin', group}, St),
+    progress_message('begin', group, St),
     F = fun (T) -> enter_group(T, Timeout, St) end,
     case with_context(T, F) of
 	{ok, {Status, Time}} ->
-	    progress_message({'end', {Status, Time}}, St),
+	    progress_message('end', {Status, Time}, St),
 	    ok;
 	{error, Reason} ->
 	    cancel_message({abort, Reason}, St),
@@ -470,3 +486,43 @@ with_context(#group{context = #context{} = C, tests = I}, F) ->
 	       Type == cleanup_failed ->
 	    {error, Term}
     end.
+
+%% Implementation of buffering I/O for the insulator process. (Note that
+%% each batch of characters is just pushed on the buffer, so it needs to
+%% be reversed when it is flushed.)
+
+io_request(From, ReplyAs, Req, Buf) ->
+    {Reply, Buf1} = io_request(Req, Buf),
+    io_reply(From, ReplyAs, Reply),
+    Buf1.
+
+io_reply(From, ReplyAs, Reply) ->
+    From ! {io_reply, ReplyAs, Reply}.
+
+io_request({put_chars, Chars}, Buf) ->
+    {ok, [Chars | Buf]};
+io_request({put_chars, M, F, As}, Buf) ->
+    try apply(M, F, As) of
+	Chars -> {ok, [Chars | Buf]}
+    catch
+	C:T -> {{error, {C,T,erlang:get_stacktrace()}}, Buf}
+    end;
+io_request({get_chars, _Prompt, _N}, Buf) ->
+    {eof, Buf};
+io_request({get_chars, _Prompt, _M, _F, _Xs}, Buf) ->
+    {eof, Buf};
+io_request({get_line, _Prompt}, Buf) ->
+    {eof, Buf};
+io_request({get_until, _Prompt, _M, _F, _As}, Buf) ->
+    {eof, Buf};
+io_request({setopts, _Opts}, Buf) ->
+    {ok, Buf};
+io_request({requests, Reqs}, Buf) ->
+    io_requests(Reqs, {ok, Buf});
+io_request(_, Buf) ->
+    {{error, request}, Buf}.
+
+io_requests([R | Rs], {ok, Buf}) ->
+    io_requests(Rs, io_request(R, Buf));
+io_requests(_, Result) ->
+    Result.

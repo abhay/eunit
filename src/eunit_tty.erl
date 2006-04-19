@@ -115,7 +115,7 @@ test_begin(Id, Desc, {Module, Name, Line}, St) ->
        true -> ok
     end,
     case wait(Id, St) of
-	{{progress, {'begin', test}}, St1} ->
+	{{progress, 'begin', test}, St1} ->
 	    test_end(Id, Text, St1);
 	{{cancel, Reason}, St1} ->
 	    if St#state.verbose -> print_test_cancel(Reason);
@@ -129,7 +129,7 @@ test_begin(Id, Desc, {Module, Name, Line}, St) ->
 
 test_end(Id, Text, St) ->
     case wait(Id, St) of
-	{{progress, {'end', {Result, Time}}}, St1} ->
+	{{progress, 'end', {Result, Time, _Output}}, St1} ->
 	    if Result == ok ->
 		    if St#state.verbose -> print_test_end(Time);
 		       true -> ok
@@ -159,7 +159,7 @@ group_begin(Id, Desc, Es, St0) ->
 		 St0
 	 end,
     case wait(Id, St) of
-	{{progress, {'begin', group}}, St1} ->
+	{{progress, 'begin', group}, St1} ->
 	    group_end(Id, I, Desc, tests(Es, St1));
 	{{cancel, Reason}, St1} ->
 	    if Desc /= "", St1#state.verbose ->
@@ -176,7 +176,7 @@ group_begin(Id, Desc, Es, St0) ->
 
 group_end(Id, I, Desc, St) ->
     (case wait(Id, St) of
-	 {{progress, {'end', {ok, Time}}}, St1} ->
+	 {{progress, 'end', {ok, Time, _Output}}, St1} ->
 	     if Desc /= "", St#state.verbose ->
 		     print_group_end(St1#state.indent, Time);
 		true ->

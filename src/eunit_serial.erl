@@ -93,7 +93,7 @@ wait(Id, Type, St) ->
 	    receive
 		{status, SomeId, {cancel, _Cause}} = Msg ->
 		    wait(Id, Type, set_cancelled(SomeId, Msg, St));
-		{status, Id, {progress, {Type, _Data}}} = Msg ->
+		{status, Id, {progress, Type, _Data}} = Msg ->
 		    {{ok, Msg}, St}
 	    end;
 	{yes, Msg} ->
