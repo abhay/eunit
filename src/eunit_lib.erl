@@ -83,32 +83,32 @@ dlist_next([], Xs) ->
 -ifdef(TEST).
 dlist_test_() ->
     {"deep list traversal",
-     [?_test_("non-list term -> singleton list",
- 	      [any] = dlist_next(any)),
-      ?_test_("empty list -> empty list",
- 	      [] = dlist_next([])),
-      ?_test_("singleton list -> singleton list",
- 	      [any] = dlist_next([any])),
-      ?_test_("taking the head of a flat list",
- 	      [1,2,3] = dlist_next([1,2,3])),
-      ?_test_("skipping an initial empty list",
- 	      [1,2,3] = dlist_next([[],1,2,3])),
-      ?_test_("skipping nested initial empty lists",
- 	      [1,2,3] = dlist_next([[[[]]],1,2,3])),
-      ?_test_("skipping a final empty list",
- 	      [] = dlist_next([[]])),
-      ?_test_("skipping nested final empty lists",
- 	      [] = dlist_next([[[[]]]])),
-      ?_test_("the first element is in a sublist",
- 	      [1,2,3] = dlist_next([[1],2,3])),
-      ?_test_("traversing an empty list",
- 	      [] = dlist_flatten([])),
-      ?_test_("traversing a flat list",
- 	      [1,2,3] = dlist_flatten([1,2,3])),
-      ?_test_("traversing a deep list",
- 	      [1,2,3] = dlist_flatten([[],[1,[2,[]],3],[]])),
-      ?_test_("traversing a deep but empty list",
- 	      [] = dlist_flatten([[],[[[]]],[]]))
+     [{"non-list term -> singleton list",
+       ?_test([any] = dlist_next(any))},
+      {"empty list -> empty list",
+       ?_test([] = dlist_next([]))},
+      {"singleton list -> singleton list",
+       ?_test([any] = dlist_next([any]))},
+      {"taking the head of a flat list",
+       ?_test([1,2,3] = dlist_next([1,2,3]))},
+      {"skipping an initial empty list",
+       ?_test([1,2,3] = dlist_next([[],1,2,3]))},
+      {"skipping nested initial empty lists",
+       ?_test([1,2,3] = dlist_next([[[[]]],1,2,3]))},
+      {"skipping a final empty list",
+       ?_test([] = dlist_next([[]]))},
+      {"skipping nested final empty lists",
+       ?_test([] = dlist_next([[[[]]]]))},
+      {"the first element is in a sublist",
+       ?_test([1,2,3] = dlist_next([[1],2,3]))},
+      {"traversing an empty list",
+       ?_test([] = dlist_flatten([]))},
+      {"traversing a flat list",
+       ?_test([1,2,3] = dlist_flatten([1,2,3]))},
+      {"traversing a deep list",
+       ?_test([1,2,3] = dlist_flatten([[],[1,[2,[]],3],[]]))},
+      {"traversing a deep but empty list",
+       ?_test([] = dlist_flatten([[],[[[]]],[]]))}
      ]}.
 
 %% test support
@@ -135,22 +135,16 @@ is_string(_) ->
 -ifdef(TEST).
 is_string_test_() ->
     {"is_string",
-     [?_assert_("no non-lists",
- 		not is_string($A)),
-      ?_assert_("no non-integer lists",
- 		not is_string([true])),
-      ?_assert_("empty string",
- 		is_string("")),
-      ?_assert_("ascii string",
- 		is_string(lists:seq(0, 127))),
-      ?_assert_("latin-1 string",
- 		is_string(lists:seq(0, 255))),
-      ?_assert_("unicode string",
- 		is_string([0, $A, 16#10fffe, 16#10ffff])),
-      ?_assert_("not above unicode range",
- 		not is_string([0, $A, 16#110000])),
-      ?_assert_("no negative codepoints",
- 		not is_string([$A, -1, 0]))
+     [{"no non-lists", ?_assert(not is_string($A))},
+      {"no non-integer lists", ?_assert(not is_string([true]))},
+      {"empty string", ?_assert(is_string(""))},
+      {"ascii string", ?_assert(is_string(lists:seq(0, 127)))},
+      {"latin-1 string", ?_assert(is_string(lists:seq(0, 255)))},
+      {"unicode string",
+       ?_assert(is_string([0, $A, 16#10fffe, 16#10ffff]))},
+      {"not above unicode range",
+       ?_assert(not is_string([0, $A, 16#110000]))},
+      {"no negative codepoints", ?_assert(not is_string([$A, -1, 0]))}
      ]}.
 -endif.
 
@@ -310,6 +304,8 @@ browse_fun_test_() ->
 
 %% ---------------------------------------------------------------------
 %% Replacement for os:cmd
+
+%% @TODO line break normalization (on by default, 'raw' flag to turn off?)
 
 command(Cmd) ->
     command(Cmd, "").

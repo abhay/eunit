@@ -71,13 +71,10 @@
 -define(assertNot(BoolExpr), ?assert(not (BoolExpr))).
 
 -define(_test(Expr), {?LINE, fun () -> (Expr) end}).
--define(_test_(Str, Expr), {Str, ?_test(Expr)}).
 
 -define(_assert(BoolExpr), ?_test(?assert(BoolExpr))).
--define(_assert_(Str, BoolExpr), {Str, ?_assert(BoolExpr)}).
 
 -define(_assertNot(BoolExpr), ?_assert(not (BoolExpr))).
--define(_assertNot_(Str, BoolExpr), {Str, ?_assertNot(BoolExpr)}).
 
 %% Note: Class and Term are patterns, and can not be used for value.
 -ifdef(NOTEST).
