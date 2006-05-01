@@ -76,6 +76,23 @@
 
 -define(_assertNot(BoolExpr), ?_assert(not (BoolExpr))).
 
+%% This is mostly a convenience which gives more detailed reports.
+%% Note: Guard is a guarded pattern, and can not be used for value.
+-ifdef(NOTEST).
+-define(assertMatch(Guard,Expr),ok).
+-else.
+-define(assertMatch(Guard, Expr),
+	((fun () ->
+	    case (Expr) of
+		Guard -> ok;
+		__V -> erlang:error({assertMatch_failed, (??Expr),
+				     {expected, (??Guard)},
+				     {value, __V}})
+	    end
+	  end)())).
+-endif.
+-define(_assertMatch(Guard, Expr), ?_test(?assertMatch(Guard, Expr))).
+
 %% Note: Class and Term are patterns, and can not be used for value.
 -ifdef(NOTEST).
 -define(assertException(Class, Term, Expr),ok).
