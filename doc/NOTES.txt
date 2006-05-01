@@ -10,6 +10,7 @@ Concepts and features
  - test engine as a producer/iterator: run next, step back, repeat...
 
    * iterators working
+   * TODO: need to be able to stop after N failures
 
  - test module - a container (as in 'eunit:run(M)'); automatic test collection
 
@@ -128,7 +129,9 @@ Concepts and features
 
  - running tests in parallel
 
-   * works
+   * works (also running N tests at a time)
+   * TODO: restructure to start new job as soon as slot is available
+   * TODO: cannot enumerate all tests in advance for really large sets
 
  - running a test or set of tests in a new process (like setup/teardown)
 
@@ -144,6 +147,8 @@ Concepts and features
  - running OS commands, testing output and result values
 
    * works
+   * TODO: better Windows support; CRLF handling
+   * TODO: is it possible to capture stderr separately somehow?
 
  - starting one or more additional nodes to run tests or suites on
 
@@ -161,6 +166,21 @@ Concepts and features
 
    * the numbering scheme in listings take care of this point
 
+ - running EUnit from command line, as a standalone tool
+
+   * TODO: command line interface similar to that of edoc
+
+ - open source (currently licensed under Erlang Public License)
+
+   * TODO: also release as LGPL separately, or just change EPL to LGPL?
+   * TODO: make include files Public Domain?
+
+ - marking tests as known failures, for handling known bugs
+
+   * TODO: known-failure is necessary to avoid writing "inverted-logic" tests
+   * TODO: is it possible to handle known timout/setup failures?
+
+ - diagnostic tests which never fail, but may cause warnings
 
 Assorted notes which may or may not be useful, e.g. for documentation
 ---------------------------------------------------------------------
