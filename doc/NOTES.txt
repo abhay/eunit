@@ -170,10 +170,9 @@ Concepts and features
 
    * TODO: command line interface similar to that of edoc
 
- - open source (currently licensed under Erlang Public License)
+ - open source (licensed under the GNU Lesser General Public Licence)
 
-   * TODO: also release as LGPL separately, or just change EPL to LGPL?
-   * TODO: make include files Public Domain?
+   * header files can be used without tainting, according to LGPL
 
  - marking tests as known failures, for handling known bugs
 
