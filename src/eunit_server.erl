@@ -150,7 +150,7 @@ server_command(From, stop, Jobs, St) ->
     server_loop(Jobs, St#state{stopped = true});
 server_command(From, {watch, Target}, Jobs, St) ->
     %% the code watcher is only started on demand
-    eunit_code:subscribe(self()),
+    code_watcher:subscribe(self()),
     St1 = add_watch(Target, St),
     server_command_reply(From, {ok, {watch, Target}}),
     server_loop(Jobs, St1);

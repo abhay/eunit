@@ -18,10 +18,9 @@
 %% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
 %% @private
-%% @see eunit
-%% @doc EUnit code watching service
+%% @doc Erlang code watching service
 
--module(eunit_code).
+-module(code_watcher).
 
 -export([start/0, start/1, stop/0, stop/1, subscribe/1, subscribe/2,
 	 unsubscribe/1, unsubscribe/2, install_codespy/1, wiretap/3]).
