@@ -87,7 +87,7 @@ server_init(Name, Parent) ->
 server(Name, Listeners) ->
     receive
 	{code_server, {module, M}} ->
-	    cast({Name, {loaded, M}}, Listeners),
+	    cast({loaded, M}, Listeners),
 	    server(Name, Listeners);
 	{monitor, Pid} when is_pid(Pid) ->
 	    server(Name, sets:add_element(Pid, Listeners));
@@ -100,7 +100,7 @@ server(Name, Listeners) ->
     end.
 
 cast(M, Listeners) ->
-    sets:fold(fun (L, M) -> L ! M end, M, Listeners).
+    sets:fold(fun (L, M) -> L ! {code_monitor, M} end, M, Listeners).
 
 
 %% code server spy using generic wiretap functionality
