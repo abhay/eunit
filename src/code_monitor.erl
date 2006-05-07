@@ -64,7 +64,8 @@ start(Name) ->
 	    Parent = self(),
 	    Pid = spawn(fun () -> server_init(Name, Parent) end),
 	    receive
-		{Pid, Result} -> Result
+		{Pid, ok} -> Pid;
+		{Pid, error} -> throw(no_server)
 	    end;
 	Pid -> Pid
     end.
@@ -77,12 +78,16 @@ server_init(Name, Parent) ->
 		{ok, _Spy} ->
 		    Parent ! {Self, ok},
 		    server(Name, sets:new());
-		{error, R} ->
-		    Parent ! {Self, {error, R}}
+		{error, _R} ->
+		    init_failure(Parent)
 	    end;
 	_ ->
-	    Parent ! {Self, {error, failed}}    
+	    init_failure(Parent)
     end.
+
+init_failure(Parent) ->
+    Parent ! {self(), error},
+    exit(failed).
 
 server(Name, Listeners) ->
     receive
