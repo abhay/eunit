@@ -20,7 +20,8 @@ SOURCES= \
 	eunit_lib.erl \
 	eunit_data.erl \
 	eunit_tty.erl \
-	code_monitor.erl
+	code_monitor.erl \
+	file_monitor.erl
 
 OBJECTS=$(SOURCES:%.erl=$(EBIN)/%.$(EMULATOR)) $(APP_TARGET) $(APPUP_TARGET)
 

@@ -99,7 +99,7 @@ start(Name, Options) ->
 	Pid -> Pid
     end.
 
--record(state, {name, time, dir, file, clients}).
+-record(state, {name, time, dirs, files, clients}).
 
 server_init(Name, Parent, Options) ->
     Self = self(),
@@ -119,8 +119,8 @@ init_state(Name, Options) ->
 	   end,
     #state{name = Name,
 	   time = Time,
-	   dir = dict:new(),
-	   file = dict:new(),
+	   dirs = dict:new(),
+	   files = dict:new(),
 	   clients = dict:new()}.
 
 server(St) ->
@@ -166,46 +166,121 @@ del_client(Pid, St) ->
     end.
 
 
-%% no handling of directory monitoring yet
-
 -record(monitor, {pid, reference}).
 
-new_monitor({file, Path}, Pid, St) ->
+-record(entry, {info = undefined, files = [], monitors = sets:new()}).
+
+new_monitor(Object, Pid, St) ->
     Ref = make_ref(),
     Monitor = #monitor{pid = Pid, reference = Ref},
-    {Ref, St#state{file = add_monitor(Path, Monitor, St#state.file)}}.
+    new_monitor(Object, Monitor, Ref, St).
+
+%% We must separate the namespaces for files and dirs, since we can't
+%% trust the users to keep them distinct; there may be simultaneous file
+%% and dir monitors for the same path.
+
+new_monitor({file, Path}, Monitor, Ref, St) ->
+    {Ref, St#state{files = add_monitor(Path, Monitor, file,
+				       St#state.files)}};
+new_monitor({dir, Path}, Monitor, Ref, St) ->
+    {Ref, St#state{dirs = add_monitor(Path, Monitor, dir,
+				      St#state.dirs)}}.
 
 %% Adding a new monitor forces an immediate poll of the file, such that
 %% previous monitors only see any real change, while the new monitor
 %% either gets {exists, ...} or {error, ...}.
 
-add_monitor(Path, Monitor, Dict) ->
-    {Info, Monitors} = case dict:find(Path, Dict) of
-			   {ok, Data} -> poll_file(Path, Data);
-			   error -> {get_file_info(Path), sets:new()}
-		       end,
-    event(undefined, Info, Path, sets:add_element(Monitor, sets:new())),
-    dict:store(Path, {Info, sets:add_element(Monitor, Monitors)}, Dict).
+add_monitor(Path, Monitor, Type, Dict) ->
+    Entry = case dict:find(Path, Dict) of
+		{ok, OldEntry} -> poll_file(Path, OldEntry, Type);
+		error -> new_entry(Path, Type)
+	    end,
+    event(#entry{}, dummy_entry(Entry, Monitor), Type, Path),
+    NewEntry = Entry#entry{monitors =
+			   sets:add_element(Monitor,
+					    Entry#entry.monitors)},
+    dict:store(Path, NewEntry, Dict).
 
-%% @TODO add type to messages?
+dummy_entry(Entry, Monitor) ->
+    Entry#entry{monitors = sets:add_element(Monitor, sets:new())}.
 
-event(Info, Info, _Path, _Monitors) ->
+new_entry(Path, Type) ->
+    refresh_entry(Path, #entry{monitors = sets:new()}, Type).
+
+
+%% purging monitors belonging to dead clients
+
+purge_pid(Pid, St) ->
+    Files = dict:map(fun (_Path, {Info, Monitors}) ->
+			     {Info, purge_monitor_pid(Pid, Monitors)}
+		     end,
+		     St#state.files),
+    St#state{files = purge_empty_sets(Files)}.
+
+purge_monitor_pid(Pid, Monitors) ->
+    sets:filter(fun (#monitor{pid = P}) when P == Pid -> false;
+		    (_) -> true
+		end,
+		Monitors).
+
+purge_empty_sets(Dict) ->
+    dict:filter(fun (_Path, {_Info, Monitors}) ->
+			sets:size(Monitors) > 0
+		end, Dict).
+
+
+%% generating events upon state changes
+
+event(#entry{info = Info}, #entry{info = Info}, _Type, _Path) ->
+    %% no change in state
     ok;
-event(undefined, NewInfo, Path, Monitors) when not is_atom(NewInfo) ->
-    cast({exists, Path, NewInfo}, Monitors);
-event(_OldInfo, NewInfo, Path, Monitors) when is_atom(NewInfo) ->
-    cast({error, Path, NewInfo}, Monitors);
-event(_OldInfo, NewInfo, Path, Monitors) ->
-    cast({changed, Path, NewInfo}, Monitors).
+event(#entry{info = undefined}, #entry{info = NewInfo}=Entry,
+      Type, Path)
+  when not is_atom(NewInfo) ->
+    %% file or directory exists, for a fresh monitor
+    Files = [{added, F} || F <- Entry#entry.files],
+    cast({exists, Path, Type, NewInfo, Files}, Entry#entry.monitors);
+event(_OldEntry, #entry{info = NewInfo}=Entry, Type, Path)
+  when is_atom(NewInfo) ->
+    %% file is not available
+    cast({error, Path, Type, NewInfo}, Entry#entry.monitors);
+event(_OldEntry, Entry, file, Path) ->
+    %% a normal file has changed
+    cast({changed, Path, file, Entry#entry.info, []},
+	 Entry#entry.monitors);
+event(#entry{info = OldInfo}, #entry{info = NewInfo}=Entry, dir, Path)
+  when is_atom(OldInfo) ->
+    %% a directory has suddenly become available
+    Files = [{added, F} || F <- Entry#entry.files],
+    cast({changed, Path, dir, NewInfo, Files}, Entry#entry.monitors);
+event(OldEntry, #entry{info = NewInfo}=Entry, dir, Path) ->
+    %% a directory has changed
+    Files = diff_lists(Entry#entry.files, OldEntry#entry.files),
+    cast({changed, Path, NewInfo, dir, Files}, Entry#entry.monitors).
 
 
 poll(St) ->
-    St#state{file = dict:map(fun poll_file/2, St#state.file)}.
+    St#state{files = dict:map(fun (Path, Entry) ->
+				      poll_file(Path, Entry, file)
+			      end,
+			      St#state.files),
+	     dirs = dict:map(fun (Path, Entry) ->
+				     poll_file(Path, Entry, dir)
+			     end,
+			     St#state.dirs)}.
 
-poll_file(Path, {OldInfo, Monitors}) ->
-    NewInfo = get_file_info(Path),
-    event(OldInfo, NewInfo, Path, Monitors),
-    {NewInfo, Monitors}.
+poll_file(Path, Entry, Type) ->
+    NewEntry = refresh_entry(Path, Entry, Type),
+    event(Entry, NewEntry, Type, Path),
+    NewEntry.
+
+refresh_entry(Path, Entry, Type) ->
+    Info = get_file_info(Path),
+    Files = case Type of
+		dir when not is_atom(Info) -> get_dir_files(Path);	    
+		_ -> []
+	    end,
+    Entry#entry{info = Info, files = Files}.
 
 
 %% We clear some fields of the file_info so that we only trigger on real
@@ -220,30 +295,37 @@ get_file_info(Path) ->
 	    Error  % posix error code as atom
     end.
 
+%% Listing the members of a directory; note that it yields the empty
+%% list if it fails - this is not the place for error detection.
 
-cast(Msg, Ms) ->
+get_dir_files(Path) ->
+    case file:list_dir(Path) of
+	{ok, Files} -> lists:sort(Files);
+	{error, _} -> []
+    end.
+
+%% both lists must be sorted for this diff to work
+
+diff_lists([F1 | Fs1], [F2 | _]=Fs2) when F1 < F2 ->
+    [{added, F1} | diff_lists(Fs1, Fs2)];
+diff_lists([F1 | _]=Fs1, [F2 | Fs2]) when F1 > F2 ->
+    [{deleted, F2} | diff_lists(Fs1, Fs2)];
+diff_lists([_ | Fs1], [_ | Fs2]) ->
+    diff_lists(Fs1, Fs2);
+diff_lists([F | Fs1], Fs2) ->
+    [{added, F} | diff_lists(Fs1, Fs2)];
+diff_lists(Fs1, [F | Fs2]) ->
+    [{deleted, F} | diff_lists(Fs1, Fs2)];
+diff_lists([], []) ->
+    [].
+
+
+%% Multicasting events to clients
+
+cast(Msg, Monitors) ->
     sets:fold(fun (#monitor{pid = Pid, reference = Ref}, Msg) ->
-		      erlang:display({file_monitor, Ref, Msg}),
+		      %%erlang:display({file_monitor, Ref, Msg}),
 		      Pid ! {file_monitor, Ref, Msg},
 		      Msg  % note that this is a fold, not a map
 	      end,
-	      Msg, Ms).
-
-
-purge_pid(Pid, St) ->
-    Files = dict:map(fun (_Path, {Info, Monitors}) ->
-			     {Info, purge_monitor_pid(Pid, Monitors)}
-		     end,
-		     St#state.file),
-    St#state{file = purge_empty_sets(Files)}.
-
-purge_monitor_pid(Pid, Monitors) ->
-    sets:filter(fun (#monitor{pid = P}) when P == Pid -> false;
-		    (_) -> true
-		end,
-		Monitors).
-
-purge_empty_sets(Dict) ->
-    dict:filter(fun (_Path, {_Info, Monitors}) ->
-			sets:size(Monitors) > 0
-		end, Dict).
+	      Msg, Monitors).
