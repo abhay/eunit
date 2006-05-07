@@ -125,7 +125,7 @@ server_loop(Jobs, St) ->
 	    From ! {self(), stopped};
 	{command, From, Cmd} ->
 	    server_command(From, Cmd, Jobs, St);
-	{code_watcher, {loaded, M}} ->
+	{code_monitor, {loaded, M}} ->
 	    case is_watched(M, St) of
 		true -> spawn(fun () -> auto_test(M) end);
 		false -> ok
@@ -150,7 +150,7 @@ server_command(From, stop, Jobs, St) ->
     server_loop(Jobs, St#state{stopped = true});
 server_command(From, {watch, Target}, Jobs, St) ->
     %% the code watcher is only started on demand
-    code_watcher:subscribe(self()),
+    code_monitor:subscribe(self()),
     St1 = add_watch(Target, St),
     server_command_reply(From, {ok, {watch, Target}}),
     server_loop(Jobs, St1);

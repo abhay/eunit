@@ -17,35 +17,34 @@
 %%
 %% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
-%% @private
-%% @doc Erlang code watching service
+%% @doc Erlang code monitoring service
 
--module(code_watcher).
+-module(code_monitor).
 
--export([start/0, start/1, stop/0, stop/1, subscribe/1, subscribe/2,
-	 unsubscribe/1, unsubscribe/2, install_codespy/1, wiretap/3]).
+-export([start/0, start/1, stop/0, stop/1, monitor/1, monitor/2,
+	 demonitor/1, demonitor/2, install_codespy/1, wiretap/3]).
 
 
--define(WATCHER, code_watcher).
+-define(SERVER, code_monitor).
 
-subscribe(Pid) ->
-    subscribe(?WATCHER, Pid).
+monitor(Pid) ->
+    monitor(?SERVER, Pid).
 
-subscribe(Server, Pid) when is_pid(Pid) ->
+monitor(Server, Pid) when is_pid(Pid) ->
     ensure_started(Server),
-    Server ! {subscribe, Pid},
+    Server ! {monitor, Pid},
     ok.
 
-unsubscribe(Pid) ->
-    unsubscribe(?WATCHER, Pid).
+demonitor(Pid) ->
+    demonitor(?SERVER, Pid).
 
-unsubscribe(Server, Pid) when is_pid(Pid) ->
+demonitor(Server, Pid) when is_pid(Pid) ->
     ensure_started(Server),
-    Server ! {unsubscribe, Pid},
+    Server ! {demonitor, Pid},
     ok.
 
 stop() ->
-    stop(?WATCHER).
+    stop(?SERVER).
 
 stop(Server) ->
     Server ! stop,
@@ -57,27 +56,27 @@ ensure_started(Pid) when is_pid(Pid) ->
     Pid.
 
 start() ->
-    start(?WATCHER).
+    start(?SERVER).
 
 start(Name) ->
     case whereis(Name) of
 	undefined ->
 	    Parent = self(),
-	    Pid = spawn(fun () -> watcher_init(Name, Parent) end),
+	    Pid = spawn(fun () -> server_init(Name, Parent) end),
 	    receive
 		{Pid, Result} -> Result
 	    end;
 	Pid -> Pid
     end.
 
-watcher_init(Name, Parent) ->
+server_init(Name, Parent) ->
     Self = self(),
     case catch register(Name, Self) of
 	true ->
 	    case install_codespy(Self) of
 		{ok, _Spy} ->
 		    Parent ! {Self, ok},
-		    watcher(Name, sets:new());
+		    server(Name, sets:new());
 		{error, R} ->
 		    Parent ! {Self, {error, R}}
 	    end;
@@ -85,19 +84,19 @@ watcher_init(Name, Parent) ->
 	    Parent ! {Self, {error, failed}}    
     end.
 
-watcher(Name, Listeners) ->
+server(Name, Listeners) ->
     receive
 	{code_server, {module, M}} ->
 	    cast({Name, {loaded, M}}, Listeners),
-	    watcher(Name, Listeners);
-	{subscribe, Pid} when is_pid(Pid) ->
-	    watcher(Name, sets:add_element(Pid, Listeners));
-	{unsubscribe, Pid} ->
-	    watcher(Name, sets:del_element(Pid, Listeners));
+	    server(Name, Listeners);
+	{monitor, Pid} when is_pid(Pid) ->
+	    server(Name, sets:add_element(Pid, Listeners));
+	{demonitor, Pid} ->
+	    server(Name, sets:del_element(Pid, Listeners));
 	stop ->
 	    exit(normal);
 	_ ->
-	    watcher(Name, Listeners)
+	    server(Name, Listeners)
     end.
 
 cast(M, Listeners) ->
