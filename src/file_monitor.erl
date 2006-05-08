@@ -19,7 +19,7 @@
 %% @copyright 2006 Richard Carlsson
 %% @doc Erlang file monitoring service
 
-%% The behaviour of this service is modelled on the open source FAM
+%% The behaviour of this service is inspired by the open source FAM
 %% daemon [http://oss.sgi.com/projects/fam/].
 
 -module(file_monitor).
@@ -33,14 +33,6 @@
 
 
 -define(SERVER, file_monitor).
-
-%% @TODO monitor directories, FAM-style
-%%  -normal messages for the directory itself
-%%  -message includes list of entries
-%%     * when monitor is added for existing dir
-%%     * when monitored dir changes from error to existing
-%%     * but not for normal changes
-%%  -
 
 %% NOTE: paths should be absolute, but this is not checked
 
@@ -77,7 +69,7 @@ stop(Server) ->
     ok.
 	    
 ensure_started(Name) when is_atom(Name) ->
-    start(Name);
+    start(Name, []);
 ensure_started(Pid) when is_pid(Pid) ->
     Pid.
 
