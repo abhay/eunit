@@ -248,7 +248,7 @@ event(#entry{info = OldInfo}, #entry{info = NewInfo}=Entry, dir, Path)
 event(OldEntry, #entry{info = NewInfo}=Entry, dir, Path) ->
     %% a directory has changed
     Files = diff_lists(Entry#entry.files, OldEntry#entry.files),
-    cast({changed, Path, NewInfo, dir, Files}, Entry#entry.monitors).
+    cast({changed, Path, dir, NewInfo, Files}, Entry#entry.monitors).
 
 
 poll(St) ->
