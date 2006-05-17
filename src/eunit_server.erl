@@ -23,7 +23,8 @@
 
 -module(eunit_server).
 
--export([start/1, stop/1, start_test/4, watch/2, watch_app/2]).
+-export([start/1, stop/1, start_test/4, watch/2, watch_path/2,
+	 watch_regexp/2]).
 
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
@@ -38,11 +39,19 @@ stop(Server) ->
 start_test(Server, Super, T, Options) ->
     command(Server, {test, Super, T, Options}).
 
-watch_app(Server, Appname) ->
-    watch(Server, code:lib_dir(Appname) ++ "/ebin").
+watch(Server, Module) when is_atom(Module) ->
+    command(Server, {watch, {module, Module}}).
 
-watch(Server, Target) ->
-    command(Server, {watch, Target}).
+watch_path(Server, Path) ->
+    command(Server, {watch, {path, filename:flatten(Path)}}).
+
+watch_regexp(Server, Regex) ->
+    case regexp:parse(Regex) of
+	{ok, R} ->
+	    command(Server, {watch, {regexp, R}});
+	{error, _}=Error ->
+	    Error
+    end.
 
 %% This makes sure the server is started before sending the command, and
 %% returns {ok, Result} if the server accepted the command or {error,
@@ -108,13 +117,14 @@ server_start(Name, Parent) ->
 	    exit(error)
     end.
 
--record(state, {name, stopped, watch_modules, watch_paths}).
+-record(state, {name, stopped, watch_modules, watch_paths, watch_regexps}).
 
 server_init(Name) ->
     server_loop(dict:new(), #state{stopped = false,
 				   name = Name,
 				   watch_modules = sets:new(),
-				   watch_paths = sets:new()}).
+				   watch_paths = sets:new(),
+				   watch_regexps = sets:new()}).
 
 server_loop(Jobs, St) ->
     server_check_exit(Jobs, St),
@@ -127,7 +137,7 @@ server_loop(Jobs, St) ->
 	    server_command(From, Cmd, Jobs, St);
 	{code_monitor, {loaded, M}} ->
 	    case is_watched(M, St) of
-		true -> spawn(fun () -> auto_test(M) end);
+		true -> start_auto_test(M);
 		false -> ok
 	    end,
 	    server_loop(Jobs, St)
@@ -152,11 +162,11 @@ server_command(From, {watch, Target}, Jobs, St) ->
     %% the code watcher is only started on demand
     code_monitor:monitor(self()),
     St1 = add_watch(Target, St),
-    server_command_reply(From, {ok, {watch, Target}}),
+    server_command_reply(From, ok),
     server_loop(Jobs, St1);
 server_command(From, {forget, Target}, Jobs, St) ->
     St1 = delete_watch(Target, St),
-    server_command_reply(From, {ok, {forget, Target}}),
+    server_command_reply(From, ok),
     server_loop(Jobs, St1);
 server_command(From, Cmd, Jobs, St) ->
     server_command_reply(From, {error, {unknown_command, Cmd}}),
@@ -180,6 +190,49 @@ handle_done(Reference, Jobs) ->
 	    Jobs
     end.
 
+%% Adding and removing watched modules or paths
+
+add_watch({module, M}, St) ->
+    St#state{watch_modules =
+	     sets:add_element(M, St#state.watch_modules)};
+add_watch({path, P}, St) ->
+    St#state{watch_paths =
+	     sets:add_element(P, St#state.watch_paths)};
+add_watch({regexp, R}, St) ->
+    St#state{watch_regexps =
+	     sets:add_element(R, St#state.watch_regexps)}.
+
+delete_watch({module, M}, St) ->
+    St#state{watch_modules =
+	     sets:del_element(M, St#state.watch_modules)};
+delete_watch({path, P}, St) ->
+    St#state{watch_paths =
+	     sets:del_element(P, St#state.watch_paths)};
+delete_watch({regexp, R}, St) ->
+    St#state{watch_paths =
+	     sets:del_element(R, St#state.watch_regexps)}.
+
+%% Checking if a module is being watched
+
+is_watched(M, St) when is_atom(M) ->
+    sets:is_element(M, St#state.watch_modules) orelse
+	is_watched(filename:dirname(code:which(M)), St);
+is_watched(Path, St) ->
+    sets:is_element(Path, St#state.watch_paths) orelse
+	match_any(sets:to_list(St#state.watch_regexps), Path).
+
+match_any([R | Rs], Path) ->
+    case regexp:first_match(Path, R) of
+	{match, _, _} -> true;
+	_ -> match_any(Rs, Path)
+    end;
+match_any([], _P) -> false.
+
+%% Process for running automatic tests when a watched module is loaded.
+
+start_auto_test(M) ->
+    spawn(fun () -> auto_test(M) end).
+
 auto_test(M) ->
     group_leader(whereis(user), self()),
     receive after 800 -> ok end,
@@ -189,27 +242,3 @@ auto_test(M) ->
     %% Make sure to print a dummy prompt at the end of the output, most
     %% of all so that the Emacs mode realizes that input is active.
     io:fwrite("~w\n> ", [eunit:test(M)]).
-
-%% yes, I know the below is not that solid, but it's only a prototype
-%% @TODO improve watching of paths (relative? prefixes? regexps?)
-%% @TODO watching of packages (e.g. using atoms 'foo.bar.*')
-
-add_watch(Target, St) when is_atom(Target) ->
-    St#state{watch_modules =
-	     sets:add_element(Target, St#state.watch_modules)};
-add_watch(Target, St) ->
-    St#state{watch_paths =
-	     sets:add_element(Target, St#state.watch_paths)}.
-
-delete_watch(Target, St) when is_atom(Target) ->
-    St#state{watch_modules =
-	     sets:del_element(Target, St#state.watch_modules)};
-delete_watch(Target, St) ->
-    St#state{watch_paths =
-	     sets:del_element(Target, St#state.watch_paths)}.
-
-is_watched(M, St) when is_atom(M) ->
-    sets:is_element(M, St#state.watch_modules) orelse
-	is_watched(filename:dirname(code:which(M)), St);
-is_watched(Path, St) ->
-    sets:is_element(Path, St#state.watch_paths).

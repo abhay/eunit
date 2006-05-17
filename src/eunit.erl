@@ -32,7 +32,8 @@
 
 
 -export([start/0, stop/0, test/1, test/2, test/3, list/1, submit/1,
-	 submit/2, submit/3, watch/1, watch_app/1]).
+	 submit/2, submit/3, watch/1, watch_path/1, watch_regexp/1,
+	 watch_app/1]).
 
 -export([testp/1]). %% for development testing, not official
 
@@ -58,8 +59,14 @@ stop() ->
 watch(Target) ->
     eunit_server:watch(?SERVER, Target).
 
-watch_app(Target) ->
-    eunit_server:watch_app(?SERVER, Target).
+watch_path(Target) ->
+    eunit_server:watch_path(?SERVER, Target).
+
+watch_regexp(Target) ->
+    eunit_server:watch_regexp(?SERVER, Target).
+
+watch_app(Name) ->
+    eunit_server:watch_app(?SERVER, code:lib_dir(Name) ++ "/ebin").
 
 list(T) ->
     try eunit_data:list(T)
