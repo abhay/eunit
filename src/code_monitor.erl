@@ -115,8 +115,11 @@ install_codespy(To) ->
 
 code_spy({code_call,From,{load_file,_}=Req}, Server, To) ->
     handle_load(Req, From, Req, Server, To);
-code_spy({code_call,From,{ensure_loaded,_}=Req}, Server, To) ->
-    handle_load(Req, From, Req, Server, To);
+code_spy({code_call,From,{ensure_loaded,M}=Req}=Msg, Server, To) ->
+    case erlang:module_loaded(M) of
+	true -> Server ! Msg;
+	false -> handle_load(Req, From, Req, Server, To)
+    end;
 code_spy({code_call,From,{load_abs,_,_}=Req}, Server, To) ->
     handle_load(Req, From, Req, Server, To);
 code_spy({code_call,From,{load_binary,_,_,_}=Req}, Server, To) ->
@@ -125,8 +128,8 @@ code_spy({code_call,From,{load_native_partial,_,_}=Req}, Server, To) ->
     handle_load(Req, From, Req, Server, To);
 code_spy({code_call,From,{load_native_sticky,_,_,_}=Req}, Server, To) ->
     handle_load(Req, From, Req, Server, To);
-code_spy(M, Server, _To) ->
-    Server ! M.
+code_spy(Msg, Server, _To) ->
+    Server ! Msg.
 
 handle_load(Req, From, Req, Server, To) ->
     ReplyTo = spawn(fun () -> reply_handler(Server, From, To) end),
