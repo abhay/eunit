@@ -179,7 +179,7 @@ parse({foreach, S, C, Fs} = T)
     case eunit_lib:dlist_next(Fs) of
 	[F | Fs1] when is_function(F) ->
 	    check_arity(F, 1, T),
-	    [{setup, S, C, F} | {foreach, S, C, Fs1}];
+	    [{setup, S, C, F}, {foreach, S, C, Fs1}];
 	[] ->
 	    [];
 	_ ->
@@ -199,7 +199,7 @@ parse({foreach1, S1, C1, Ps} = T)
 		    S = fun () -> S1(A) end,
 		    C = fun (X) -> C1(A, X) end,
 		    F = fun (X) -> F1(A, X) end,
-		    [{setup, S, C, F} | {foreach1, S1, C1, Ps1}];
+		    [{setup, S, C, F}, {foreach1, S1, C1, Ps1}];
 		_ ->
 		    throw({bad_test, T})
 	    end;
