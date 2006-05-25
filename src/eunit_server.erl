@@ -30,15 +30,24 @@
 -include("eunit_internal.hrl").
 
 
+-define(AUTO_TIMEOUT, 60000).   %% auto test time limit
+
+
 start(Server) when is_atom(Server) ->
     ensure_started(Server).
 
 stop(Server) ->
     command(Server, stop).
 
-start_test(Server, Super, T, Options) ->
-    command(Server, {test, Super, T, Options}).
 
+-record(job, {super, test, options}).
+
+start_test(Server, Super, T, Options) ->
+    command(Server, {start, #job{super = Super,
+				 test = T,
+				 options = Options}}).
+
+%% @TODO: add test options to watch mechanism
 watch(Server, Module) when is_atom(Module) ->
     command(Server, {watch, {module, Module}}).
 
@@ -117,77 +126,115 @@ server_start(Name, Parent) ->
 	    exit(error)
     end.
 
--record(state, {name, stopped, watch_modules, watch_paths, watch_regexps}).
+-record(state, {name,
+		stopped,
+		jobs,
+		queue,
+		auto_test,
+		watch_modules,
+		watch_paths,
+		watch_regexps}).
 
 server_init(Name) ->
-    server_loop(dict:new(), #state{stopped = false,
-				   name = Name,
-				   watch_modules = sets:new(),
-				   watch_paths = sets:new(),
-				   watch_regexps = sets:new()}).
+    server_loop(#state{name = Name,
+		       stopped = false,
+		       jobs = dict:new(),
+		       queue = queue:new(),
+		       auto_test = queue:new(),
+		       watch_modules = sets:new(),
+		       watch_paths = sets:new(),
+		       watch_regexps = sets:new()}).
 
-server_loop(Jobs, St) ->
-    server_check_exit(Jobs, St),
+server_loop(St) ->
+    server_check_exit(St),
     receive
+	{done, auto_test, _Pid} ->
+	    server_loop(auto_test_done(St));
 	{done, Reference, _Pid} ->
-	    server_loop(handle_done(Reference, Jobs), St);
+	    server_loop(handle_done(Reference, St));
 	{command, From, _Cmd} when St#state.stopped ->
 	    From ! {self(), stopped};
 	{command, From, Cmd} ->
-	    server_command(From, Cmd, Jobs, St);
+	    server_command(From, Cmd, St);
 	{code_monitor, {loaded, M}} ->
 	    case is_watched(M, St) of
-		true -> start_auto_test(M);
-		false -> ok
-	    end,
-	    server_loop(Jobs, St)
+		true -> 
+		    server_loop(new_auto_test(self(), M, St));
+		false ->
+		    server_loop(St)
+	    end
     end.
 
-server_check_exit(Jobs, St) ->
-    case dict:size(Jobs) of
+server_check_exit(St) ->
+    case dict:size(St#state.jobs) of
 	0 when St#state.stopped -> exit(normal);
 	_ -> ok
     end.
 
-server_command(From, {test, Super, T, Options}, Jobs, St) ->
-    Reference = start_test(T, Options, Super),
+server_command(From, {start, Job}, St) ->
+    Reference = make_ref(),
+    St1 = case proplists:get_bool(enqueue, Job#job.options) of
+	      true ->
+		  enqueue(Job, From, Reference, St);
+	      false ->
+		  start_job(Job, From, Reference, St)
+	  end,
     server_command_reply(From, {ok, Reference}),
-    server_loop(dict:store(Reference, From, Jobs), St);
-server_command(From, stop, Jobs, St) ->
+    server_loop(St1);
+server_command(From, stop, St) ->
     %% unregister the server name and let remaining jobs finish
     server_command_reply(From, {error, stopped}),
     catch unregister(St#state.name),
-    server_loop(Jobs, St#state{stopped = true});
-server_command(From, {watch, Target}, Jobs, St) ->
+    server_loop(St#state{stopped = true});
+server_command(From, {watch, Target}, St) ->
     %% the code watcher is only started on demand
     code_monitor:monitor(self()),
     St1 = add_watch(Target, St),
     server_command_reply(From, ok),
-    server_loop(Jobs, St1);
-server_command(From, {forget, Target}, Jobs, St) ->
+    server_loop(St1);
+server_command(From, {forget, Target}, St) ->
     St1 = delete_watch(Target, St),
     server_command_reply(From, ok),
-    server_loop(Jobs, St1);
-server_command(From, Cmd, Jobs, St) ->
+    server_loop(St1);
+server_command(From, Cmd, St) ->
     server_command_reply(From, {error, {unknown_command, Cmd}}),
-    server_loop(Jobs, St).
+    server_loop(St).
 
 server_command_reply(From, Result) ->
     From ! {self(), Result}.
 
-start_test(T, Options, Super) ->
-    %% The default is to run tests in order unless otherwise specified
-    Order = proplists:get_value(order, Options, inorder),
-    {Reference, _Pid} = eunit_proc:start(T, Order, Super),
-    Reference.
+enqueue(Job, From, Reference, St) ->
+    case dict:size(St#state.jobs) of
+	0 ->
+	    start_job(Job, From, Reference, St);
+	_ ->
+	    St#state{queue = queue:in({Job, From, Reference},
+				      St#state.queue)}
+    end.
 
-handle_done(Reference, Jobs) ->
-    case dict:find(Reference, Jobs) of
-	{ok, Pid} ->
-	    Pid ! {done, Reference},
-	    dict:erase(Reference, Jobs);
+dequeue(St) ->
+    case queue:out(St#state.queue) of
+	{empty, _} ->
+	    St;
+	{{value, {Job, From, Reference}}, Queue} ->
+	    start_job(Job, From, Reference, St#state{queue = Queue})
+    end.
+
+start_job(Job, From, Reference, St) ->
+    From ! {start, Reference},
+    %% The default is to run tests in order unless otherwise specified
+    Order = proplists:get_value(order, Job#job.options, inorder),
+    eunit_proc:start(Job#job.test, Order, Job#job.super, Reference),
+    St#state{jobs = dict:store(Reference, From, St#state.jobs)}.
+
+handle_done(Reference, St) ->
+    case dict:find(Reference, St#state.jobs) of
+	{ok, From} ->
+	    From ! {done, Reference},
+	    dequeue(St#state{jobs = dict:erase(Reference,
+					       St#state.jobs)});
 	error ->
-	    Jobs
+	    St
     end.
 
 %% Adding and removing watched modules or paths
@@ -228,17 +275,58 @@ match_any([R | Rs], Path) ->
     end;
 match_any([], _P) -> false.
 
-%% Process for running automatic tests when a watched module is loaded.
+%% Running automatic tests when a watched module is loaded.
+%% Uses a queue in order to avoid overlapping output when several
+%% watched modules are loaded simultaneously. (The currently running
+%% automatic test is kept in the queue until it is done. An empty queue
+%% means that no automatic test is running.)
 
-start_auto_test(M) ->
-    spawn(fun () -> auto_test(M) end).
+new_auto_test(Server, M, St) ->
+    case queue:is_empty(St#state.auto_test) of
+	true ->
+	    start_auto_test(Server, M);
+	false ->
+	    ok
+    end,
+    St#state{auto_test = queue:in({Server, M}, St#state.auto_test)}.
 
-auto_test(M) ->
+auto_test_done(St) ->
+    %% remove finished test from queue before checking for more
+    {_, Queue} = queue:out(St#state.auto_test),
+    case queue:out(Queue) of
+	{{value, {Server, M}}, _} ->
+	    %% this is just lookahead - the item is not removed
+	    start_auto_test(Server, M);
+	{empty, _} ->
+	    ok
+    end,
+    St#state{auto_test = Queue}.
+
+start_auto_test(Server, M) ->
+    spawn(fun () -> auto_super(Server, M) end).
+
+auto_super(Server, M) ->
+    process_flag(trap_exit, true),
+    %% Give the user a short delay before any output is produced
+    receive after 333 -> ok end,
+    %% Make sure output is sent to console on server node
     group_leader(whereis(user), self()),
-    receive after 800 -> ok end,
+    Pid = spawn_link(fun () -> auto_proc(Server, M) end),
+    receive
+	{'EXIT', Pid, _} ->
+	    ok
+    after ?AUTO_TIMEOUT	->
+	    exit(Pid, kill),
+	    io:put_chars("\n== EUnit: automatic test was aborted ==\n"),
+	    io:put_chars("\n> ")
+    end,
+    Server ! {done, auto_test, self()}.
+
+auto_proc(Server, M) ->
     %% Make the output start on a new line instead of on the same line
     %% as the current shell prompt.
     io:fwrite("\n== EUnit: testing module ~w ==\n", [M]),
+    eunit:test(Server, M, [enqueue]),
     %% Make sure to print a dummy prompt at the end of the output, most
     %% of all so that the Emacs mode realizes that input is active.
-    io:fwrite("~w\n> ", [eunit:test(M)]).
+    io:put_chars("\n-> ").

@@ -90,8 +90,12 @@ test(Server, T, Options) ->
     case eunit_server:start_test(Server, Serial, T, Options) of
 	{ok, Reference} ->
 	    receive
+		{start, Reference} ->
+		    Front ! {start, Reference}
+	    end,
+	    receive
 		{done, Reference} ->
-		    Front ! {stop, self(), Reference},
+		    Front ! {stop, Reference, self()},
 		    receive 
 			{result, Reference, Result} ->
 			    Result

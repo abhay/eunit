@@ -26,7 +26,7 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([start/3]).
+-export([start/4]).
 
 
 -record(procstate, {ref, id, super, insulator, parent, order}).
@@ -36,14 +36,13 @@
 %% Reference, Pid} to caller when finished. See the function
 %% wait_for_task/2 for details about the need for the reference.
 
-start(Tests, Order, Super) when is_pid(Super) ->
-    Reference = make_ref(),
+start(Tests, Order, Super, Reference)
+  when is_pid(Super), is_reference(Reference) ->
     St = #procstate{ref = Reference,
 		    id = [],
 		    super = Super,
 		    order = Order},
-    Pid = spawn_group(local, #group{tests = Tests}, St),
-    {Reference, Pid}.
+    spawn_group(local, #group{tests = Tests}, St).
 
 
 %% @TODO implement synchronized mode for insulator/child execution

@@ -48,19 +48,24 @@ start(List, Options) ->
     spawn(fun () -> init(Id, List, St) end).
 
 init(Id, List, St0) ->
-    if St0#state.verbose -> print_header();
-       true -> ok
-    end,
-    St = group_begin(Id, "", List, St0),
     receive
-	{stop, ReplyTo, Reference} ->
-	    Result = if St#state.fail == 0, St#state.abort == 0,
-			St#state.skip == 0 -> ok;
-			true -> error
-		     end,
-	    report(Result, St),
-	    ReplyTo ! {result, Reference, Result},
-	    ok
+	{start, Reference} ->
+	    if St0#state.verbose -> print_header();
+	       true -> ok
+	    end,
+	    St = group_begin(Id, "", List, St0),
+	    receive
+		{stop, Reference, ReplyTo} ->
+		    Result = if St#state.fail == 0, St#state.abort == 0,
+				St#state.skip == 0 ->
+				     ok;
+				true ->
+				     error
+			     end,
+		    report(Result, St),
+		    ReplyTo ! {result, Reference, Result},
+		    ok
+	    end
     end.
 
 report(ok, St) ->
