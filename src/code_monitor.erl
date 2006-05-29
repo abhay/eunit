@@ -70,18 +70,23 @@ start(Name) ->
 	Pid -> Pid
     end.
 
+server_init(undefined = Name, Parent) ->
+    %% anonymous server
+    server_init_1(Name, Parent);
 server_init(Name, Parent) ->
-    Self = self(),
-    case catch register(Name, Self) of
+    case catch register(Name, self()) of
 	true ->
-	    case install_codespy(Self) of
-		{ok, _Spy} ->
-		    Parent ! {Self, ok},
-		    server(Name, sets:new());
-		{error, _R} ->
-		    init_failure(Parent)
-	    end;
+	    server_init_1(Name, Parent);
 	_ ->
+	    init_failure(Parent)
+    end.
+
+server_init_1(Name, Parent) ->
+    case install_codespy(self()) of
+	{ok, _Spy} ->
+	    Parent ! {self(), ok},
+	    server(Name, sets:new());
+	{error, _} ->
 	    init_failure(Parent)
     end.
 
@@ -108,7 +113,7 @@ cast(M, Listeners) ->
     sets:fold(fun (L, M) -> L ! {code_monitor, M} end, M, Listeners).
 
 
-%% code server spy using generic wiretap functionality
+%% code server spy process using generic wiretap functionality
 
 install_codespy(To) ->
     wiretap(code_server, To, fun code_spy/3).
@@ -143,8 +148,9 @@ reply_handler(Server, Client, To) ->
 	    To ! Client ! M
     end.
 
-
-%% basic wiretapping of registered processes
+%% basic wiretapping of registered processes (it should be possible to
+%% have several wiretaps attached to the same registered name; they will
+%% transparently form a chain, without knowing about each other)
 
 wiretap(Name, To, F) when is_atom(Name), is_pid(To), is_function(F) ->
     Parent = self(),
@@ -186,10 +192,14 @@ wiretap_loop(Name, To, Pid, F) ->
 	    wiretap_loop(Name, To, Pid, F)
     end.
 
+%% note that the registered name might get stolen from the spy process,
+%% e.g., by another active wiretap
+
 wiretap_exit(Name, Pid) ->
     %% the receiver died - restore things and go away invisibly
     unlink(Pid),
     Self = self(),
+    %% sadly, this is not atomic...
     case whereis(Name) of
 	Self ->
 	    catch unregister(Name),
