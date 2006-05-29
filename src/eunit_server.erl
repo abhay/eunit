@@ -114,26 +114,30 @@ ensure_started(Name, N) when N > 0 ->
 ensure_started(_, _) ->
     throw(no_server).
 
+server_start(undefined = Name, Parent) ->
+    %% anonymous server
+    server_start_1(Name, Parent);
 server_start(Name, Parent) ->
-    Pid = self(),
-    try register(Name, Pid) of
-	true ->
-	    Parent ! {Pid, ok},
-	    server_init(Name)
+    try register(Name, self()) of
+	true -> server_start_1(Name, Parent)
     catch
 	_:_ ->
-	    Parent ! {Pid, error},
+	    Parent ! {self(), error},
 	    exit(error)
     end.
+
+server_start_1(Name, Parent) ->
+    Parent ! {self(), ok},
+    server_init(Name).
 
 -record(state, {name,
 		stopped,
 		jobs,
 		queue,
 		auto_test,
-		watch_modules,
-		watch_paths,
-		watch_regexps}).
+		modules,
+		paths,
+		regexps}).
 
 server_init(Name) ->
     server_loop(#state{name = Name,
@@ -141,9 +145,9 @@ server_init(Name) ->
 		       jobs = dict:new(),
 		       queue = queue:new(),
 		       auto_test = queue:new(),
-		       watch_modules = sets:new(),
-		       watch_paths = sets:new(),
-		       watch_regexps = sets:new()}).
+		       modules = sets:new(),
+		       paths = sets:new(),
+		       regexps = sets:new()}).
 
 server_loop(St) ->
     server_check_exit(St),
@@ -240,40 +244,34 @@ handle_done(Reference, St) ->
 %% Adding and removing watched modules or paths
 
 add_watch({module, M}, St) ->
-    St#state{watch_modules =
-	     sets:add_element(M, St#state.watch_modules)};
+    St#state{modules = sets:add_element(M, St#state.modules)};
 add_watch({path, P}, St) ->
-    St#state{watch_paths =
-	     sets:add_element(P, St#state.watch_paths)};
+    St#state{paths = sets:add_element(P, St#state.paths)};
 add_watch({regexp, R}, St) ->
-    St#state{watch_regexps =
-	     sets:add_element(R, St#state.watch_regexps)}.
+    St#state{regexps = sets:add_element(R, St#state.regexps)}.
 
 delete_watch({module, M}, St) ->
-    St#state{watch_modules =
-	     sets:del_element(M, St#state.watch_modules)};
+    St#state{modules = sets:del_element(M, St#state.modules)};
 delete_watch({path, P}, St) ->
-    St#state{watch_paths =
-	     sets:del_element(P, St#state.watch_paths)};
+    St#state{paths = sets:del_element(P, St#state.paths)};
 delete_watch({regexp, R}, St) ->
-    St#state{watch_paths =
-	     sets:del_element(R, St#state.watch_regexps)}.
+    St#state{regexps = sets:del_element(R, St#state.regexps)}.
 
 %% Checking if a module is being watched
 
 is_watched(M, St) when is_atom(M) ->
-    sets:is_element(M, St#state.watch_modules) orelse
-	is_watched(filename:dirname(code:which(M)), St);
+    sets:is_element(M, St#state.modules) orelse
+	is_watched(code:which(M), St);
 is_watched(Path, St) ->
-    sets:is_element(Path, St#state.watch_paths) orelse
-	match_any(sets:to_list(St#state.watch_regexps), Path).
+    sets:is_element(filename:dirname(Path), St#state.paths) orelse
+	match_any(sets:to_list(St#state.regexps), Path).
 
-match_any([R | Rs], Path) ->
-    case regexp:first_match(Path, R) of
+match_any([R | Rs], Str) ->
+    case regexp:first_match(Str, R) of
 	{match, _, _} -> true;
-	_ -> match_any(Rs, Path)
+	_ -> match_any(Rs, Str)
     end;
-match_any([], _P) -> false.
+match_any([], _Str) -> false.
 
 %% Running automatic tests when a watched module is loaded.
 %% Uses a queue in order to avoid overlapping output when several
