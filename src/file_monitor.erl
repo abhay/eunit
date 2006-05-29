@@ -93,16 +93,21 @@ start(Name, Options) ->
 
 -record(state, {name, time, dirs, files, clients}).
 
+server_init(undefined = Name, Parent, Options) ->
+    %% anonymous server
+    server_init_1(Name, Parent, Options);
 server_init(Name, Parent, Options) ->
-    Self = self(),
-    case catch register(Name, Self) of
+    case catch register(Name, self()) of
 	true ->
-	    Parent ! {Self, ok},
-	    server(set_timer(init_state(Name, Options)));
+	    server_init_1(Name, Parent, Options);
 	_ ->
-	    Parent ! {Self, error},
+	    Parent ! {self(), error},
 	    exit(failed)
     end.
+
+server_init_1(Name, Parent, Options) ->
+    Parent ! {self(), ok},
+    server(set_timer(init_state(Name, Options))).
 
 init_state(Name, Options) ->
     Time = case proplists:get_value(poll_time, Options) of
