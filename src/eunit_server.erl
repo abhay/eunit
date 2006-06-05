@@ -160,7 +160,7 @@ server_loop(St) ->
 	    From ! {self(), stopped};
 	{command, From, Cmd} ->
 	    server_command(From, Cmd, St);
-	{code_monitor, {loaded, M}} ->
+	{code_monitor, {loaded, M, _Time}} ->
 	    case is_watched(M, St) of
 		true -> 
 		    server_loop(new_auto_test(self(), M, St));

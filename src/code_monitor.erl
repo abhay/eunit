@@ -97,7 +97,7 @@ init_failure(Parent) ->
 server(Name, Listeners) ->
     receive
 	{code_server, {module, M}} ->
-	    cast({loaded, M}, Listeners),
+	    cast({loaded, M, erlang:now()}, Listeners),
 	    server(Name, Listeners);
 	{monitor, Pid} when is_pid(Pid) ->
 	    server(Name, sets:add_element(Pid, Listeners));
