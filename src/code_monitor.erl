@@ -110,7 +110,8 @@ server(Name, Listeners) ->
     end.
 
 cast(M, Listeners) ->
-    sets:fold(fun (L, M) -> L ! {code_monitor, M} end, M, Listeners).
+    Msg = {code_monitor, M},
+    sets:fold(fun (L, M) -> L ! Msg end, M, Listeners).
 
 
 %% code server spy process using generic wiretap functionality
