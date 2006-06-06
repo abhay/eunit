@@ -210,21 +210,24 @@ new_entry(Path, Type) ->
 %% purging monitors belonging to dead clients
 
 purge_pid(Pid, St) ->
-    Files = dict:map(fun (_Path, {Info, Monitors}) ->
-			     {Info, purge_monitor_pid(Pid, Monitors)}
+    Files = dict:map(fun (_Path, Entry) ->
+			     purge_monitor_pid(Pid, Entry)
 		     end,
 		     St#state.files),
     St#state{files = purge_empty_sets(Files)}.
 
-purge_monitor_pid(Pid, Monitors) ->
-    sets:filter(fun (#monitor{pid = P}) when P == Pid -> false;
-		    (_) -> true
-		end,
-		Monitors).
+purge_monitor_pid(Pid, Entry) ->
+    Entry#entry{monitors =
+		sets:filter(fun (#monitor{pid = P})
+				when P == Pid -> false;
+				(_) -> true
+			    end,
+			    Entry#entry.monitors)}.
+
 
 purge_empty_sets(Dict) ->
-    dict:filter(fun (_Path, {_Info, Monitors}) ->
-			sets:size(Monitors) > 0
+    dict:filter(fun (_Path, Entry) ->
+			sets:size(Entry#entry.monitors) > 0
 		end, Dict).
 
 
