@@ -120,6 +120,8 @@ init_state(Name, Options) ->
 	   files = dict:new(),
 	   clients = dict:new()}.
 
+%% TODO: add demonitor functions
+
 server(St) ->
     receive
 	{monitor, From, Object, Pid} when is_pid(Pid) ->
@@ -227,6 +229,20 @@ purge_empty_sets(Dict) ->
 
 
 %% generating events upon state changes
+
+%% Message formats:
+%%   {exists, Path, Type, #file_info{}, Files}
+%%   {changed, Path, Type, #file_info{}, Files}
+%%   {error, Path, Type, Info}
+%%
+%% Type is dir or file. If Type is file, Files is always []. If Type is
+%% dir, Files is a list of {added, FileName} and {deleted, FileName},
+%% where FileName is relative to dir, without any path component.
+%%
+%% When a new monitor is installed for a path, an initial {exists,...}
+%% or {error,...} message will be sent to the monitor owner.
+%%
+%% Subsequent events will be either {changed,...} or {error,...}.
 
 event(#entry{info = Info}, #entry{info = Info}, _Type, _Path) ->
     %% no change in state
