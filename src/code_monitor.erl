@@ -24,6 +24,8 @@
 -export([start/0, start/1, stop/0, stop/1, monitor/1, monitor/2,
 	 demonitor/1, demonitor/2, install_codespy/1, wiretap/3]).
 
+-export([main/1]).    %% private
+
 
 -define(SERVER, code_monitor).
 
@@ -95,6 +97,10 @@ init_failure(Parent) ->
     exit(failed).
 
 server(Name, Listeners) ->
+    ?MODULE:main({Name, Listeners}).
+
+%% @private
+main({Name, Listeners}) ->
     receive
 	{code_server, {module, M}} ->
 	    cast({loaded, M, erlang:now()}, Listeners),
@@ -110,8 +116,7 @@ server(Name, Listeners) ->
     end.
 
 cast(M, Listeners) ->
-    Msg = {code_monitor, M},
-    sets:fold(fun (L, M) -> L ! Msg end, M, Listeners).
+    sets:fold(fun (L, M) -> L ! M end, {code_monitor, M}, Listeners).
 
 
 %% code server spy process using generic wiretap functionality
