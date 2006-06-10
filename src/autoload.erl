@@ -93,7 +93,7 @@ start(Name) ->
 	Pid -> Pid
     end.
 
--record(state, {name, modules}).
+-record(state, {name, modules, files, dirs}).
 
 -record(module, {time = ?ZERO_TIMESTAMP, file}).
 
@@ -104,7 +104,9 @@ server_init(Name, Parent) ->
 	    Parent ! {Self, ok},
 	    code_monitor:monitor(self()),
 	    server(#state{name = Name,
-			  modules = dict:new()});
+			  modules = dict:new(),
+			  files = sets:new(),
+			  dirs = sets:new()});
 	_ ->
 	    init_failure(Parent)
     end.
@@ -133,28 +135,24 @@ server_command_reply(From, Msg) ->
 
 server_command(From, {watch, {dir, Path}}, St) ->
     server_command_reply(From, ok),
-    monitor_dir(Path),
-    server(St);
+    server(monitor_dir(Path, St));
 server_command(From, {watch, {file, Path}}, St) ->
     server_command_reply(From, ok),
-    monitor_file(Path),
-    server(St);
+    server(monitor_file(Path, St));
 server_command(From, {watch, {module, M}}, St) ->
     server_command_reply(From, ok),
     server(handle_watch_module(M, St)).
 
 file_event({exists, Path, dir, _Info, Files}, St) ->
     %%erlang:display({autoload_saw_exists, dir, Path}),
-    monitor_beams(Path, Files),
-    server(St);
+    server(monitor_beams(Path, Files, St));
 file_event({exists, Path, file, Info, _}, St) ->
     %%erlang:display({autoload_saw_exists, file, Path}),
     %% treat file-exists messages just like file-changed messages
     server(changed_file(Path, Info#file_info.mtime, St));
 file_event({changed, Path, dir, _Info, Files}, St) ->
     %%erlang:display({autoload_saw_changed, dir, Path}),
-    monitor_beams(Path, Files),
-    server(St);
+    server(monitor_beams(Path, Files, St));
 file_event({changed, Path, file, #file_info{}=Info, _}, St) ->
     %%erlang:display({autoload_saw_changed, file, Path}),
     server(changed_file(Path, Info#file_info.mtime, St));
@@ -170,7 +168,7 @@ code_event({loaded, M, Time}, St) ->
     %%erlang:display({autoload_saw_loaded, M, Time}),
     server(loaded_module(M, Time, St));
 code_event(_Msg, St) ->
-    %%erlang:display({autoload_unexpected_code_event, _Msg}),
+    erlang:display({autoload_unexpected_code_event, _Msg}),
     server(St).
 
 
@@ -187,8 +185,8 @@ handle_watch_module(M, St) ->
 	    %% existing file found (already loaded or in path): monitor
 	    %% the file and map M to that file (even if the first load
 	    %% might turn out to be from another file)
-	    monitor_file(File),
-	    store_record(M, #module{file = File}, St);
+	    store_record(M, #module{file = File},
+			 monitor_file(File, St));
 	_ ->
 	    %% preloaded or cover-compiled module - ignore
 	    St
@@ -197,14 +195,15 @@ handle_watch_module(M, St) ->
 
 %% called when a monitored directory is detected as new or changed
 
-monitor_beams(Path, Files) ->
+monitor_beams(Path, Files, St) ->
     Beams = [F || {added, F} <- Files, filename:extension(F) == ".beam"],
-    lists:foreach(
-      fun (F) ->
+    lists:foldl(
+      fun (F, St) ->
 	      F1 = filename:absname(filename:join(Path, F)),
 	      %%erlang:display({autoload_monitoring, file, F1}),
-	      monitor_file(F1)
+	      monitor_file(F1, St)
       end,
+      St,
       Beams).
 
 
@@ -219,8 +218,8 @@ loaded_module(M, Time, St) ->
 		undefined when is_list(File) ->
 		    %% a watched module gets a late binding to a file
 		    %%erlang:display({autoload_late_binding, M, File}),
-		    monitor_file(File),
-		    update_record(M, R, Time, File, St);
+		    update_record(M, R, Time, File,
+				  monitor_file(File, St));
 		File when is_list(File) ->
 		    %% loaded from watched file - update the load time
 		    update_record(M, R, Time, File, St);
@@ -283,11 +282,28 @@ find_record(M, St) ->
 store_record(M, R, St) ->
     St#state{modules = dict:store(M, R, St#state.modules)}.
 
-monitor_file(File) ->
-    file_monitor:monitor_file(File, self()).
+%% we must remember watched files/dirs, so we don't set up more than one
+%% file monitor for the same path
 
-monitor_dir(Path) ->
-    file_monitor:monitor_dir(Path, self()).
+monitor_file(Path, St) ->
+    case sets:is_element(Path, St#state.files) of
+	true ->
+	    %%erlang:display({autoload_already_watching, Path}),
+	    St;
+	false ->
+	    file_monitor:monitor_file(Path, self()),
+	    St#state{files = sets:add_element(Path, St#state.files)}
+    end.
+
+monitor_dir(Path, St) ->
+    case sets:is_element(Path, St#state.dirs) of
+	true ->
+	    %%erlang:display({autoload_already_watching, Path}),
+	    St;
+	false ->
+	    file_monitor:monitor_dir(Path, self()),
+	    St#state{dirs = sets:add_element(Path, St#state.dirs)}
+    end.
 
 
 %% find name of module stored in a beam file
