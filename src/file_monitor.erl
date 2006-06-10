@@ -35,8 +35,6 @@
 -define(POLL_TIME, 5000). % default; change with option poll_time
 -define(SERVER, file_monitor).
 
-%% TODO: add demonitor functions
-
 %% NOTE: paths should be absolute, but this is not checked
 
 %% We don't change the paths, e.g. from relative to absolute, but we
