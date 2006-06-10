@@ -22,9 +22,9 @@
 -module(autoload).
 
 -export([start/0, start/1, stop/0, stop/1,
-	 watch_module/1, watch_module/2,
-	 watch_file/1, watch_file/2,
-	 watch_dir/1, watch_dir/2
+	 watch_module/1, watch_module/2, watch_module/3,
+	 watch_file/1, watch_file/2, watch_file/3,
+	 watch_dir/1, watch_dir/2, watch_dir/3
 	]).
 
 -include_lib("kernel/include/file.hrl").
@@ -40,22 +40,31 @@
 
 
 watch_dir(Path) ->
-    watch_dir(?SERVER, Path).
+    watch_dir(Path, []).
 
-watch_dir(Server, Path) ->
-    command(Server, {watch, {dir, filename:flatten(Path)}}).
+watch_dir(Path, Opts) ->
+    watch_dir(?SERVER, Path, Opts).
+
+watch_dir(Server, Path, Opts) ->
+    command(Server, {watch, {dir, filename:flatten(Path)}, Opts}).
 
 watch_file(Path) ->
-    watch_file(?SERVER, Path).
+    watch_file(Path, []).
 
-watch_file(Server, Path) ->
-    command(Server, {watch, {file, filename:flatten(Path)}}).
+watch_file(Path, Opts) ->
+    watch_file(?SERVER, Path, Opts).
+
+watch_file(Server, Path, Opts) ->
+    command(Server, {watch, {file, filename:flatten(Path)}, Opts}).
 
 watch_module(Module) ->
-    watch_module(?SERVER, Module).
+    watch_module(Module, []).
 
-watch_module(Server, Module) when is_atom(Module) ->
-    command(Server, {watch, {module, Module}}).
+watch_module(Module, Opts) ->
+    watch_module(?SERVER, Module, Opts).
+
+watch_module(Server, Module, Opts) when is_atom(Module) ->
+    command(Server, {watch, {module, Module}, Opts}).
 
 
 command(Server, Msg) ->
@@ -95,7 +104,7 @@ start(Name) ->
 
 -record(state, {name, modules, files, dirs}).
 
--record(module, {time = ?ZERO_TIMESTAMP, file}).
+-record(module, {time = ?ZERO_TIMESTAMP, file, opts = []}).
 
 server_init(Name, Parent) ->
     Self = self(),
@@ -106,7 +115,7 @@ server_init(Name, Parent) ->
 	    server(#state{name = Name,
 			  modules = dict:new(),
 			  files = sets:new(),
-			  dirs = sets:new()});
+			  dirs = dict:new()});
 	_ ->
 	    init_failure(Parent)
     end.
@@ -133,15 +142,15 @@ server(St) ->
 server_command_reply(From, Msg) ->
     From ! {self(), Msg}.
 
-server_command(From, {watch, {dir, Path}}, St) ->
+server_command(From, {watch, {dir, Path}, Opts}, St) ->
     server_command_reply(From, ok),
-    server(monitor_dir(Path, St));
-server_command(From, {watch, {file, Path}}, St) ->
+    server(monitor_dir(Path, Opts, St));
+server_command(From, {watch, {file, Path}, Opts}, St) ->
     server_command_reply(From, ok),
-    server(monitor_file(Path, St));
-server_command(From, {watch, {module, M}}, St) ->
+    server(monitor_file(Path, Opts, St));
+server_command(From, {watch, {module, M}, Opts}, St) ->
     server_command_reply(From, ok),
-    server(handle_watch_module(M, St)).
+    server(monitor_module(M, Opts, St)).
 
 file_event({exists, Path, dir, _Info, Files}, St) ->
     %%erlang:display({autoload_saw_exists, dir, Path}),
@@ -174,38 +183,44 @@ code_event(_Msg, St) ->
 
 %% called when asked to watch a module M
 
-handle_watch_module(M, St) ->
+monitor_module(M, Opts, St) ->
+    ensure_loaded(M, "", Opts),
     case code:which(M) of
 	non_existing ->
 	    %% no module loaded or found in path (e.g., the user has not
 	    %% run 'make' yet, or has not updated the path): store
 	    %% mapping from M to undefined file, for late binding
-	    store_record(M, #module{}, St);
+	    store_record(M, #module{opts = Opts}, St);
 	File when is_list(File) ->
 	    %% existing file found (already loaded or in path): monitor
 	    %% the file and map M to that file (even if the first load
 	    %% might turn out to be from another file)
 	    store_record(M, #module{file = File},
-			 monitor_file(File, St));
+			 monitor_file(File, Opts, St));
 	_ ->
 	    %% preloaded or cover-compiled module - ignore
 	    St
     end.
 
-
 %% called when a monitored directory is detected as new or changed
 
 monitor_beams(Path, Files, St) ->
+    Opts = get_dir_opts(Path, St),
     Beams = [F || {added, F} <- Files, filename:extension(F) == ".beam"],
     lists:foldl(
       fun (F, St) ->
 	      F1 = filename:absname(filename:join(Path, F)),
 	      %%erlang:display({autoload_monitoring, file, F1}),
-	      monitor_file(F1, St)
+	      monitor_file(F1, Opts, St)
       end,
       St,
       Beams).
 
+get_dir_opts(Path, St) ->
+    case dict:find(Path, St#state.dirs) of
+	{ok, Opts} -> Opts;	    
+	error -> []
+    end.
 
 %% called when a module was detected as loaded or reloaded (either
 %% caused by an auto-load or by someone else)
@@ -218,8 +233,9 @@ loaded_module(M, Time, St) ->
 		undefined when is_list(File) ->
 		    %% a watched module gets a late binding to a file
 		    %%erlang:display({autoload_late_binding, M, File}),
+		    Opts = R#module.opts,
 		    update_record(M, R, Time, File,
-				  monitor_file(File, St));
+				  monitor_file(File, Opts, St));
 		File when is_list(File) ->
 		    %% loaded from watched file - update the load time
 		    update_record(M, R, Time, File, St);
@@ -283,9 +299,10 @@ store_record(M, R, St) ->
     St#state{modules = dict:store(M, R, St#state.modules)}.
 
 %% we must remember watched files/dirs, so we don't set up more than one
-%% file monitor for the same path
+%% file monitor for the same path; for dirs, we also remember options
 
-monitor_file(Path, St) ->
+monitor_file(Path, Opts, St) ->
+    ensure_loaded([], Path, Opts),
     case sets:is_element(Path, St#state.files) of
 	true ->
 	    %%erlang:display({autoload_already_watching, Path}),
@@ -295,16 +312,44 @@ monitor_file(Path, St) ->
 	    St#state{files = sets:add_element(Path, St#state.files)}
     end.
 
-monitor_dir(Path, St) ->
-    case sets:is_element(Path, St#state.dirs) of
+monitor_dir(Path, Opts, St) ->
+    case dict:is_key(Path, St#state.dirs) of
 	true ->
 	    %%erlang:display({autoload_already_watching, Path}),
 	    St;
 	false ->
 	    file_monitor:monitor_dir(Path, self()),
-	    St#state{dirs = sets:add_element(Path, St#state.dirs)}
+	    St#state{dirs = dict:store(Path, Opts, St#state.dirs)}
     end.
 
+%% try to ensure that a module/file is loaded (M is [] if unknown;
+%% File is "" if unknown)
+
+ensure_loaded(M, File, Opts) ->
+    case proplists:get_bool(load, Opts) of
+	true when is_atom(M) ->
+	    ensure_loaded_1(M, File);  %% known module name
+	true when M == [] ->
+	    case beam_module(File) of
+		{module, Module} ->
+		    ensure_loaded_1(Module, File);
+		error ->
+		    ok  %% couldn't load
+	    end;
+	false -> ok
+    end.
+
+ensure_loaded_1(M, File) ->
+    %% always try to load using the path first
+    case code:ensure_loaded(M) of
+	{module, _} ->
+	    ok;
+	{error, _} when File == [] ->
+	    ok;  %% ignore error
+	{error, _} ->
+	    %% try loading directly from the file
+	    code:load_abs(File)  %% ignore result    
+    end.
 
 %% find name of module stored in a beam file
 
