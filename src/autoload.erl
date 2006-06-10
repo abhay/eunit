@@ -32,6 +32,7 @@
 -define(SERVER, autoload).
 -define(ZERO_TIMESTAMP, {0,0,0}).
 
+%% TODO: un-watching functionality
 
 %% We're not trying to provide strong guarantees here. The autoloader is
 %% supposed to behave like a human assistant might - race conditions may
@@ -114,7 +115,7 @@ server_init(Name, Parent) ->
 	    code_monitor:monitor(self()),
 	    server(#state{name = Name,
 			  modules = dict:new(),
-			  files = sets:new(),
+			  files = dict:new(),
 			  dirs = dict:new()});
 	_ ->
 	    init_failure(Parent)
@@ -218,7 +219,7 @@ monitor_beams(Path, Files, St) ->
 
 get_dir_opts(Path, St) ->
     case dict:find(Path, St#state.dirs) of
-	{ok, Opts} -> Opts;	    
+	{ok, {_Ref, Opts}} -> Opts;	    
 	error -> []
     end.
 
@@ -299,17 +300,18 @@ store_record(M, R, St) ->
     St#state{modules = dict:store(M, R, St#state.modules)}.
 
 %% we must remember watched files/dirs, so we don't set up more than one
-%% file monitor for the same path; for dirs, we also remember options
+%% file monitor for the same path, and so we can cancel monitors; for
+%% dirs, we also remember options
 
 monitor_file(Path, Opts, St) ->
     ensure_loaded([], Path, Opts),
-    case sets:is_element(Path, St#state.files) of
+    case dict:is_key(Path, St#state.files) of
 	true ->
 	    %%erlang:display({autoload_already_watching, Path}),
 	    St;
 	false ->
-	    file_monitor:monitor_file(Path, self()),
-	    St#state{files = sets:add_element(Path, St#state.files)}
+	    {ok, _, Ref} = file_monitor:monitor_file(Path, self()),
+	    St#state{files = dict:store(Path, Ref, St#state.files)}
     end.
 
 monitor_dir(Path, Opts, St) ->
@@ -318,8 +320,9 @@ monitor_dir(Path, Opts, St) ->
 	    %%erlang:display({autoload_already_watching, Path}),
 	    St;
 	false ->
-	    file_monitor:monitor_dir(Path, self()),
-	    St#state{dirs = dict:store(Path, Opts, St#state.dirs)}
+	    {ok, _, Ref} = file_monitor:monitor_dir(Path, self()),
+	    St#state{dirs = dict:store(Path, {Ref, Opts},
+				       St#state.dirs)}
     end.
 
 %% try to ensure that a module/file is loaded (M is [] if unknown;
