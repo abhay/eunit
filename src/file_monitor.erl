@@ -25,7 +25,8 @@
 -module(file_monitor).
 
 -export([start/0, start/1, start/2, stop/0, stop/1, monitor_file/2,
-	 monitor_file/3, monitor_dir/2, monitor_dir/3]).
+	 monitor_file/3, monitor_dir/2, monitor_dir/3, demonitor/1,
+	 demonitor/2]).
 
 -export([main/1]).    %% private
 
@@ -53,13 +54,22 @@ monitor_dir(Path, Pid) ->
 monitor_dir(Server, Path, Pid) ->
     monitor(Server, dir, filename:flatten(Path), Pid).
 
-
 monitor(Server, Type, Path, Pid) when is_pid(Pid) ->
+    {ok, Ref} = command(Server, {monitor, {Type, Path}, Pid}),
+    {ok, Path, Ref}.
+
+demonitor(Ref) ->
+    demonitor(?SERVER, Ref).
+
+demonitor(Server, Ref) ->
+    ok = command(Server, {demonitor, Ref}).
+
+
+command(Server, Cmd) ->
     ServerPid = ensure_started(Server),
-    ServerPid ! {monitor, self(), {Type, Path}, Pid},
+    ServerPid ! {command, self(), Cmd},
     receive
-	{ok, Ref} ->
-	    {ok, Path, Ref}
+	{ServerPid, Result} -> Result
     end.
 
 
@@ -93,7 +103,7 @@ start(Name, Options) ->
 	Pid -> Pid
     end.
 
--record(state, {name, time, dirs, files, clients}).
+-record(state, {name, time, dirs, files, clients, refs}).
 
 server_init(undefined = Name, Parent, Options) ->
     %% anonymous server
@@ -120,17 +130,21 @@ init_state(Name, Options) ->
 	   time = Time,
 	   dirs = dict:new(),
 	   files = dict:new(),
-	   clients = dict:new()}.
+	   clients = dict:new(),
+	   refs = dict:new()}.
 
 server(St) -> ?MODULE:main(St).
 
 %% @private
 main(St) ->
     receive
-	{monitor, From, Object, Pid} when is_pid(Pid) ->
+	{command, From, {monitor, Object, Pid}} when is_pid(Pid) ->
 	    {Ref, St1} = new_monitor(Object, Pid, St),
-	    From ! {ok, Ref},
+	    server_reply(From, {ok, Ref}),
 	    server(add_client(Pid, St1));
+	{command, From, {demonitor, Ref}} ->
+	    server_reply(From, ok),
+	    server(delete_monitor(Ref, St));
 	stop ->
 	    exit(normal);
 	time ->
@@ -141,6 +155,8 @@ main(St) ->
 	    server(St)
     end.
 
+server_reply(To, Msg) ->
+    To ! {self(), Msg}.
 
 set_timer(St) ->
     erlang:send_after(St#state.time, self(), time),
@@ -175,7 +191,9 @@ del_client(Pid, St) ->
 new_monitor(Object, Pid, St) ->
     Ref = make_ref(),
     Monitor = #monitor{pid = Pid, reference = Ref},
-    new_monitor(Object, Monitor, Ref, St).
+    new_monitor(Object, Monitor, Ref,
+		St#state{refs = dict:store(Ref, {Pid, Object},
+					   St#state.refs)}).
 
 %% We must separate the namespaces for files and dirs, since we can't
 %% trust the users to keep them distinct; there may be simultaneous file
@@ -209,6 +227,38 @@ dummy_entry(Entry, Monitor) ->
 new_entry(Path, Type) ->
     refresh_entry(Path, #entry{monitors = sets:new()}, Type).
 
+%% deleting a monitor by reference
+
+delete_monitor(Ref, St) ->
+    case dict:find(Ref, St#state.refs) of
+	{ok, {_Pid, Object}} ->
+	    St1 = St#state{refs = dict:erase(Ref, St#state.refs)},
+	    delete_monitor_1(Ref, Object, St1);
+	error ->
+	    St
+    end.
+
+delete_monitor_1(Ref, {file, Path}, St) ->
+    St#state{files = delete_monitor_2(Path, Ref, St#state.files)};
+delete_monitor_1(Ref, {dir, Path}, St) ->
+    St#state{dirs = delete_monitor_2(Path, Ref, St#state.dirs)}.
+
+delete_monitor_2(Path, Ref, Dict) ->
+    case dict:find(Path, Dict) of
+	{ok, Entry} -> 
+	    purge_empty_sets(
+	      dict:store(Path, purge_monitor_ref(Ref, Entry), Dict));
+	error ->
+	    Dict
+    end.
+
+purge_monitor_ref(Ref, Entry) ->
+    Entry#entry{monitors =
+		sets:filter(fun (#monitor{reference = R})
+				when R == Ref -> false;
+				(_) -> true
+			    end,
+			    Entry#entry.monitors)}.
 
 %% purging monitors belonging to dead clients
 
@@ -217,7 +267,18 @@ purge_pid(Pid, St) ->
 			     purge_monitor_pid(Pid, Entry)
 		     end,
 		     St#state.files),
-    St#state{files = purge_empty_sets(Files)}.
+    Dirs = dict:map(fun (_Path, Entry) ->
+			    purge_monitor_pid(Pid, Entry)
+		    end,
+		    St#state.dirs),
+    Refs = dict:filter(fun (_Ref, {P, _})
+			   when P == Pid -> false;
+			   (_, _) -> true
+		       end,
+		       St#state.refs),
+    St#state{refs = Refs,
+	     files = purge_empty_sets(Files),
+	     dirs = purge_empty_sets(Dirs)}.
 
 purge_monitor_pid(Pid, Entry) ->
     Entry#entry{monitors =
@@ -226,7 +287,6 @@ purge_monitor_pid(Pid, Entry) ->
 				(_) -> true
 			    end,
 			    Entry#entry.monitors)}.
-
 
 purge_empty_sets(Dict) ->
     dict:filter(fun (_Path, Entry) ->
