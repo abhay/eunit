@@ -27,12 +27,14 @@
 -export([start/0, start/1, start/2, stop/0, stop/1, monitor_file/2,
 	 monitor_file/3, monitor_dir/2, monitor_dir/3]).
 
+-export([main/1]).    %% private
+
 -include_lib("kernel/include/file.hrl").
 
 -define(POLL_TIME, 5000). % default; change with option poll_time
-
-
 -define(SERVER, file_monitor).
+
+%% TODO: add demonitor functions
 
 %% NOTE: paths should be absolute, but this is not checked
 
@@ -120,9 +122,10 @@ init_state(Name, Options) ->
 	   files = dict:new(),
 	   clients = dict:new()}.
 
-%% TODO: add demonitor functions
+server(St) -> ?MODULE:main(St).
 
-server(St) ->
+%% @private
+main(St) ->
     receive
 	{monitor, From, Object, Pid} when is_pid(Pid) ->
 	    {Ref, St1} = new_monitor(Object, Pid, St),
