@@ -23,8 +23,8 @@
 
 -module(eunit_server).
 
--export([start/1, stop/1, start_test/4, watch/2, watch_path/2,
-	 watch_regexp/2]).
+-export([start/1, stop/1, start_test/4, watch/3, watch_path/3,
+	 watch_regexp/3]).
 
 -export([main/1]).  % private
 
@@ -49,17 +49,16 @@ start_test(Server, Super, T, Options) ->
 				 test = T,
 				 options = Options}}).
 
-%% @TODO: add test options to watch mechanism
-watch(Server, Module) when is_atom(Module) ->
-    command(Server, {watch, {module, Module}}).
+watch(Server, Module, Opts) when is_atom(Module) ->
+    command(Server, {watch, {module, Module}, Opts}).
 
-watch_path(Server, Path) ->
-    command(Server, {watch, {path, filename:flatten(Path)}}).
+watch_path(Server, Path, Opts) ->
+    command(Server, {watch, {path, filename:flatten(Path)}, Opts}).
 
-watch_regexp(Server, Regex) ->
+watch_regexp(Server, Regex, Opts) ->
     case regexp:parse(Regex) of
 	{ok, R} ->
-	    command(Server, {watch, {regexp, R}});
+	    command(Server, {watch, {regexp, R}, Opts});
 	{error, _}=Error ->
 	    Error
     end.
@@ -196,9 +195,10 @@ server_command(From, stop, St) ->
     server_command_reply(From, {error, stopped}),
     catch unregister(St#state.name),
     server(St#state{stopped = true});
-server_command(From, {watch, Target}, St) ->
+server_command(From, {watch, Target, _Opts}, St) ->
     %% the code watcher is only started on demand
     code_monitor:monitor(self()),
+    %% TODO: propagate options to testing stage
     St1 = add_watch(Target, St),
     server_command_reply(From, ok),
     server(St1);

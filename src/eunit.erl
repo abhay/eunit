@@ -31,9 +31,11 @@
 -include("eunit_internal.hrl").
 
 
--export([start/0, stop/0, test/1, test/2, test/3, list/1, submit/1,
-	 submit/2, submit/3, watch/1, watch_path/1, watch_regexp/1,
-	 watch_app/1]).
+-export([start/0, start/1, stop/0, stop/1, test/1, test/2, test/3,
+	 list/1, submit/1, submit/2, submit/3, watch/1, watch/2,
+	 watch/3, watch_path/1, watch_path/2, watch_path/3,
+	 watch_regexp/1, watch_regexp/2, watch_regexp/3, watch_app/1,
+	 watch_app/2, watch_app/3]).
 
 -export([testp/1]). %% for development testing, not official
 
@@ -51,22 +53,57 @@ full_test_() ->
 %% EUnit entry points
 
 start() ->
-    eunit_server:start(?SERVER).
+    start(?SERVER).
+
+start(Server) ->
+    eunit_server:start(Server).
 
 stop() ->
-    eunit_server:stop(?SERVER).
+    stop(?SERVER).
+
+stop(Server) ->
+    eunit_server:stop(Server).
 
 watch(Target) ->
-    eunit_server:watch(?SERVER, Target).
+    watch(Target, []).
+
+watch(Target, Options) ->
+    watch(?SERVER, Target, Options).
+
+watch(Server, Target, Options) ->
+    eunit_server:watch(Server, Target, Options).
 
 watch_path(Target) ->
-    eunit_server:watch_path(?SERVER, Target).
+    watch_path(Target, []).
+
+watch_path(Target, Options) ->
+    watch_path(?SERVER, Target, Options).
+
+watch_path(Server, Target, Options) ->
+    eunit_server:watch_path(Server, Target, Options).
 
 watch_regexp(Target) ->
-    eunit_server:watch_regexp(?SERVER, Target).
+    watch_regexp(Target, []).
+
+watch_regexp(Target, Options) ->
+    watch_regexp(?SERVER, Target, Options).
+
+watch_regexp(Server, Target, Options) ->
+    eunit_server:watch_regexp(Server, Target, Options).
 
 watch_app(Name) ->
-    eunit_server:watch_app(?SERVER, code:lib_dir(Name) ++ "/ebin").
+    watch_app(Name, []).
+
+watch_app(Name, Options) ->
+    watch_app(?SERVER, Name, Options).
+
+watch_app(Server, Name, Options) ->
+    case code:lib_dir(Name) of
+	Path when is_list(Path) ->
+	    watch_path(Server, filename:join(Path, "ebin"), Options);
+	_ ->
+	    error
+    end.
 
 list(T) ->
     try eunit_data:list(T)
