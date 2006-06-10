@@ -26,6 +26,8 @@
 -export([start/1, stop/1, start_test/4, watch/2, watch_path/2,
 	 watch_regexp/2]).
 
+-export([main/1]).  % private
+
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
@@ -140,22 +142,26 @@ server_start_1(Name, Parent) ->
 		regexps}).
 
 server_init(Name) ->
-    server_loop(#state{name = Name,
-		       stopped = false,
-		       jobs = dict:new(),
-		       queue = queue:new(),
-		       auto_test = queue:new(),
-		       modules = sets:new(),
-		       paths = sets:new(),
-		       regexps = sets:new()}).
+    server(#state{name = Name,
+		  stopped = false,
+		  jobs = dict:new(),
+		  queue = queue:new(),
+		  auto_test = queue:new(),
+		  modules = sets:new(),
+		  paths = sets:new(),
+		  regexps = sets:new()}).
 
-server_loop(St) ->
+server(St) ->
     server_check_exit(St),
+    ?MODULE:main(St).
+
+%% @private
+main(St) ->
     receive
 	{done, auto_test, _Pid} ->
-	    server_loop(auto_test_done(St));
+	    server(auto_test_done(St));
 	{done, Reference, _Pid} ->
-	    server_loop(handle_done(Reference, St));
+	    server(handle_done(Reference, St));
 	{command, From, _Cmd} when St#state.stopped ->
 	    From ! {self(), stopped};
 	{command, From, Cmd} ->
@@ -163,9 +169,9 @@ server_loop(St) ->
 	{code_monitor, {loaded, M, _Time}} ->
 	    case is_watched(M, St) of
 		true -> 
-		    server_loop(new_auto_test(self(), M, St));
+		    server(new_auto_test(self(), M, St));
 		false ->
-		    server_loop(St)
+		    server(St)
 	    end
     end.
 
@@ -184,25 +190,25 @@ server_command(From, {start, Job}, St) ->
 		  start_job(Job, From, Reference, St)
 	  end,
     server_command_reply(From, {ok, Reference}),
-    server_loop(St1);
+    server(St1);
 server_command(From, stop, St) ->
     %% unregister the server name and let remaining jobs finish
     server_command_reply(From, {error, stopped}),
     catch unregister(St#state.name),
-    server_loop(St#state{stopped = true});
+    server(St#state{stopped = true});
 server_command(From, {watch, Target}, St) ->
     %% the code watcher is only started on demand
     code_monitor:monitor(self()),
     St1 = add_watch(Target, St),
     server_command_reply(From, ok),
-    server_loop(St1);
+    server(St1);
 server_command(From, {forget, Target}, St) ->
     St1 = delete_watch(Target, St),
     server_command_reply(From, ok),
-    server_loop(St1);
+    server(St1);
 server_command(From, Cmd, St) ->
     server_command_reply(From, {error, {unknown_command, Cmd}}),
-    server_loop(St).
+    server(St).
 
 server_command_reply(From, Result) ->
     From ! {self(), Result}.
