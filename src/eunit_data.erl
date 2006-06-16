@@ -50,22 +50,24 @@
 %%          | {inparallel, N::integer(), tests()}
 %%          | {setup, Setup::() -> R::any(),
 %%                    Cleanup::(R::any()) -> any(),
-%%                    Instantiate::(R::any()) -> tests()
+%%                    tests() | Instantiator
 %%            }
 %%          | {foreach, Setup::() -> R::any(),
 %%                      Cleanup::(R::any()) -> any(),
-%%                      Instantiators::[(R::any()) -> tests()]
+%%                      [tests() | Instantiator]
 %%            }
-%%          | {foreach1, Setup::(A::any()) -> R::any(),
-%%                       Cleanup::(A::any(), R::any()) -> any(),
-%%                       Pairs::[{A::any(),
-%%                               (A::any(), R::any()) -> tests()}]
+%%          | {foreachx, Setup::(X::any()) -> R::any(),
+%%                       Cleanup::(X::any(), R::any()) -> any(),
+%%                       Pairs::[{X::any(),
+%%                               (X::any(), R::any()) -> tests()}]
 %%            }
 %%
 %% SimpleTest = TestFunction | {Line::integer(), TestFunction}
 %%
 %% TestFunction = () -> any()
 %%              | {M::moduleName(), F::functionName()}.
+%%
+%% Instantiator = (R::any()) -> tests()
 %%
 %% Note that `{string(), ...}' is equivalent to `{string(), {...}}' if
 %% the tuple contains more than two elements.
@@ -177,29 +179,26 @@ parse({foreach, S, C, Fs} = T)
     check_arity(S, 0, T),
     check_arity(C, 1, T),
     case eunit_lib:dlist_next(Fs) of
-	[F | Fs1] when is_function(F) ->
-	    check_arity(F, 1, T),
+	[F | Fs1] ->
 	    [{setup, S, C, F}, {foreach, S, C, Fs1}];
 	[] ->
-	    [];
-	_ ->
-	    throw({bad_test, T})
+	    []
     end;
-parse({foreach1, S1, Ps}) when is_function(S1), is_list(Ps) ->
-    parse({foreach1, S1, fun (_, _) -> ok end, Ps});
-parse({foreach1, S1, C1, Ps} = T) 
+parse({foreachx, S1, Ps}) when is_function(S1), is_list(Ps) ->
+    parse({foreachx, S1, fun (_, _) -> ok end, Ps});
+parse({foreachx, S1, C1, Ps} = T) 
   when is_function(S1), is_function(C1), is_list(Ps) ->
     check_arity(S1, 1, T),
     check_arity(C1, 2, T),
     case eunit_lib:dlist_next(Ps) of
 	[P | Ps1] ->
 	    case P of
-		{A, F1} when is_function(F1) ->
+		{X, F1} when is_function(F1) ->
 		    check_arity(F1, 2, T),
-		    S = fun () -> S1(A) end,
-		    C = fun (X) -> C1(A, X) end,
-		    F = fun (X) -> F1(A, X) end,
-		    [{setup, S, C, F}, {foreach1, S1, C1, Ps1}];
+		    S = fun () -> S1(X) end,
+		    C = fun (R) -> C1(X, R) end,
+		    F = fun (R) -> F1(X, R) end,
+		    [{setup, S, C, F}, {foreachx, S1, C1, Ps1}];
 		_ ->
 		    throw({bad_test, T})
 	    end;
@@ -242,9 +241,18 @@ parse({setup, S, C, I} = T)
   when is_function(S), is_function(C), is_function(I) ->
     check_arity(S, 0, T),
     check_arity(C, 1, T),
-    check_arity(I, 1, T),
-    %% note that the test is nonstandard - it needs instantiating
-    group(#group{tests = I, context = #context{setup = S, cleanup = C}});
+    case erlang:fun_info(I, arity) of
+	{arity, 0} ->
+	    %% if I is nullary, it is a plain test
+	    parse({setup, S, C, fun (_) -> I end});
+	_ ->
+	    %% otherwise, I must be an instantiator function
+	    check_arity(I, 1, T),
+	    group(#group{tests = I,
+			 context = #context{setup = S, cleanup = C}})
+    end;
+parse({setup, S, C, T}) when is_function(S), is_function(C) ->
+    parse({setup, S, C, fun (_) -> T end});
 parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->
