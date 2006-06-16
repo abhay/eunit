@@ -141,23 +141,23 @@ higher_order_test_() ->
        {foreach,
 	fun () -> 4711 end,
 	fun (4711) -> ok end,
-	[fun (X) -> {"1st", ?_assert(X == 4711)} end,
-	 [fun (X) -> {"2nd", ?_assert(X == 4711)} end],
-	 fun (X) -> {"3rd", ?_assert(X == 4711)} end]
+	[fun (R) -> {"1st", ?_assert(R == 4711)} end,
+	 [fun (R) -> {"2nd", ?_assert(R == 4711)} end],
+	 fun (R) -> {"3rd", ?_assert(R == 4711)} end]
        }
       },
-      {"Foreach1 Test",
-       {foreach1,
+      {"ForeachX Test",
+       {foreachx,
 	fun (X) -> 4711 + X end,
-	fun (A, X) when X - A == 4711 -> ok end,
-	[{1, fun (A, X) -> {"1st",
-			    ?_assert((A == 1) and (X == 4712))}
+	fun (X, R) when R - X == 4711 -> ok end,
+	[{1, fun (X, R) -> {"1st",
+			    ?_assert((X == 1) and (R == 4712))}
 	     end},
-	 [{2, fun (A, X) -> {"2nd",
-			     ?_assert((A == 2) and (X == 4713))}
+	 [{2, fun (X, R) -> {"2nd",
+			     ?_assert((X == 2) and (R == 4713))}
 	      end}],
-	 {3, fun (A, X) -> {"3rd",
-			    ?_assert((A == 3) and (X == 4714))}
+	 {3, fun (X, R) -> {"3rd",
+			    ?_assert((X == 3) and (R == 4714))}
 	     end}
 	]}
       }
@@ -181,6 +181,15 @@ file_test(FD, FileName, Text) ->
 
 msg(FD, FileName, Text) ->
     io:fwrite(FD, "~s: ~s\n", [FileName, Text]).
+
+simple_setup_test_() ->
+    {setup,
+     fun () -> ets:new(fubar, [named_table]) end,
+     fun (T) -> ets:delete(T) end,
+     ?_test(begin
+		ets:insert(fubar, {foo, bar}),
+		bar = ets:lookup_element(fubar, foo, 2)
+	    end)}.
 
 setup_test_() ->
     File = "setup_test.txt",
@@ -206,14 +215,14 @@ foreach_test_() ->
 more_abstract_file_test(Text) ->
     fun (FileName, FD) -> (abstract_file_test(Text, FileName))(FD) end.
 
-foreach1_test_() ->
-    {foreach1,
+foreachx_test_() ->
+    {foreachx,
      fun (File) -> file_setup(File, [append]) end,
      fun (_File, FD) -> file_cleanup(FD) end,
-     [{"foreach1_test_a.txt", more_abstract_file_test("eins")},
-      {"foreach1_test_b.txt", more_abstract_file_test("zwei")},
-      {"foreach1_test_c.txt", more_abstract_file_test("drei")},
-      {"foreach1_test_d.txt", more_abstract_file_test("vier")}
+     [{"foreachx_test_a.txt", more_abstract_file_test("eins")},
+      {"foreachx_test_b.txt", more_abstract_file_test("zwei")},
+      {"foreachx_test_c.txt", more_abstract_file_test("drei")},
+      {"foreachx_test_d.txt", more_abstract_file_test("vier")}
      ]}.
 
 order_test_() ->
@@ -250,3 +259,16 @@ spawn_test_() ->
        ]},
       {"get 42",	?_test(42 = get(foo))}
      ]}.
+
+match_test_() ->
+    [?_assertMatch(foo, list_to_atom("foo")),
+     ?_assertMatch({foo, _}, {foo, bar}),
+     ?_assertMatch({foo, bar}, {foo, baz}),
+     ?_assertMatch({foo, X} when is_integer(X) and (X > 0), {foo, 1}),
+     ?_assertMatch({foo, X} when is_integer(X) and (X > 0), {foo, 0})].
+
+match_test() ->
+    case {foot, 2} of
+	{foo, X} when is_integer(X) and (X > 0) ->
+	    ok
+    end.
