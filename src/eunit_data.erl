@@ -54,6 +54,7 @@
 %%                    tests() | Instantiator
 %%            }
 %%          | {setup, Setup, Cleanup, tests() | Instantiator}
+%%          | {setup, Process, Setup, tests() | Instantiator }
 %%          | {setup, Setup, tests() | Instantiator }
 %%          | {foreach, Process::local | spawn | {spawn, Node::atom()},
 %%                      Setup::() -> R::any(),
@@ -61,6 +62,7 @@
 %%                      [tests() | Instantiator]
 %%            }
 %%          | {foreach, Setup, Cleanup, [tests() | Instantiator]}
+%%          | {foreach, Process, Setup, [tests() | Instantiator]}
 %%          | {foreach, Setup, [tests() | Instantiator]}
 %%          | {foreachx, Process::local | spawn | {spawn, Node::atom()},
 %%                       Setup::(X::any()) -> R::any(),
@@ -69,6 +71,7 @@
 %%                               (X::any(), R::any()) -> tests()}]
 %%            }
 %%          | {foreachx, Setup, Cleanup, Pairs}
+%%          | {foreachx, Process, Setup, Pairs}
 %%          | {foreachx, Setup, Pairs}
 %%
 %% SimpleTest = TestFunction | {Line::integer(), TestFunction}
@@ -182,10 +185,13 @@ next(Tests) ->
     end.
 
 parse({foreach, S, Fs}) when is_function(S), is_list(Fs) ->
-    parse({foreach, S, fun (_) -> ok end, Fs});
+    parse({foreach, S, fun ok/1, Fs});
 parse({foreach, S, C, Fs})
   when is_function(S), is_function(C), is_list(Fs) ->
     parse({foreach, ?DEFAULT_SETUP_PROCESS, S, C, Fs});
+parse({foreach, P, S, Fs})
+  when is_function(S), is_list(Fs) ->
+    parse({foreach, P, S, fun ok/1, Fs});
 parse({foreach, P, S, C, Fs} = T)
   when is_function(S), is_function(C), is_list(Fs) ->
     check_arity(S, 0, T),
@@ -197,10 +203,13 @@ parse({foreach, P, S, C, Fs} = T)
 	    []
     end;
 parse({foreachx, S1, Ps}) when is_function(S1), is_list(Ps) ->
-    parse({foreachx, S1, fun (_, _) -> ok end, Ps});
+    parse({foreachx, S1, fun ok/2, Ps});
 parse({foreachx, S1, C1, Ps})
   when is_function(S1), is_function(C1), is_list(Ps) ->
     parse({foreachx, ?DEFAULT_SETUP_PROCESS, S1, C1, Ps});
+parse({foreachx, P, S1, Ps})
+  when is_function(S1), is_list(Ps) ->
+    parse({foreachx, P, S1, fun ok/2, Ps});
 parse({foreachx, P, S1, C1, Ps} = T) 
   when is_function(S1), is_function(C1), is_list(Ps) ->
     check_arity(S1, 1, T),
@@ -248,9 +257,11 @@ parse({spawn, T}) ->
 parse({spawn, N, T}) when is_atom(N) ->
     group(#group{tests = T, spawn = {remote, N}});
 parse({setup, S, I}) when is_function(S) ->
-    parse({setup, S, fun (_) -> ok end, I});
+    parse({setup, S, fun ok/1, I});
 parse({setup, S, C, I}) when is_function(S), is_function(C) ->
     parse({setup, ?DEFAULT_SETUP_PROCESS, S, C, I});
+parse({setup, P, S, I}) when is_function(S) ->
+    parse({setup, P, S, fun ok/1, I});
 parse({setup, P, S, C, I} = T)
   when is_function(S), is_function(C), is_function(I) ->
     check_arity(S, 0, T),
@@ -315,6 +326,9 @@ check_arity(F, N, T) ->
 
 bad_test(T) ->
     throw({bad_test, T}).
+
+ok(_) -> ok.    
+ok(_, _) -> ok.    
 
 %% This does some look-ahead and folds nested groups and tests where
 %% possible. E.g., {String, Test} -> Test#test{desc = String}.
