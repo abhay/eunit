@@ -201,6 +201,20 @@ setup_test_() ->
 abstract_file_test(Text, FileName) ->
     fun (FD) -> file_test(FD, FileName, Text) end.
 
+local_setup_test_() ->
+    {setup, local,
+     fun () -> put(foo, 42) end,
+     fun (_) -> erase(foo) end,
+     ?_assert(42 == get(foo))
+    }.
+
+nonlocal_setup_test_() ->
+    {setup,
+     fun () -> put(foo, 42) end,
+     fun (_) -> erase(foo) end,
+     ?_assert(undefined == get(foo))
+    }.
+
 foreach_test_() ->
     File = "foreach_test.txt",
     {foreach,
@@ -272,3 +286,26 @@ match_test() ->
 	{foo, X} when is_integer(X) and (X > 0) ->
 	    ok
     end.
+
+timeout_test_() ->
+    {spawn, {timeout, 1, ?_test(receive after 2000 -> ok end)}}.
+
+setup_timeout_test_() ->
+    {setup,
+     fun () -> erlang:display(setup)  end,
+     fun (_) -> erlang:display(cleanup) end,
+     fun (_) ->
+	     {timeout, 1, ?_test(receive after 2000 -> ok end)}
+     end
+    }.
+
+foreach_timeout_test_() ->
+    {foreach,
+     fun () -> erlang:display(setup) end,
+     fun (_) -> erlang:display(cleanup) end,
+     [
+      ?_test(succeed()),
+      {timeout, 1, ?_test(receive after 2000 -> ok end)},
+      ?_test(succeed())
+     ]
+    }.

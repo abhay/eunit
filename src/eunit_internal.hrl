@@ -12,6 +12,7 @@
 -define(DEFAULT_GENERATOR_SUFFIX, "_test_").
 -define(DEFAULT_GROUP_TIMEOUT, infinity).
 -define(DEFAULT_TEST_TIMEOUT, 5000).
+-define(DEFAULT_SETUP_PROCESS, spawn).
 
 -ifdef(DEBUG).
 -define(debugmsg(S),io:fwrite("\n* ~s: ~s\n", [?MODULE,S])).
@@ -41,4 +42,5 @@
 		tests = undefined}).
 
 -record(context, {setup = undefined,
-		  cleanup = undefined}).
+		  cleanup = undefined,
+		  process = local}).    % spawn new process for body

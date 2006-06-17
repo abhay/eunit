@@ -48,19 +48,28 @@
 %%          | {inorder, tests()}
 %%          | {inparallel, tests()}
 %%          | {inparallel, N::integer(), tests()}
-%%          | {setup, Setup::() -> R::any(),
+%%          | {setup, Process::local | spawn | {spawn, Node::atom()},
+%%                    Setup::() -> R::any(),
 %%                    Cleanup::(R::any()) -> any(),
 %%                    tests() | Instantiator
 %%            }
-%%          | {foreach, Setup::() -> R::any(),
+%%          | {setup, Setup, Cleanup, tests() | Instantiator}
+%%          | {setup, Setup, tests() | Instantiator }
+%%          | {foreach, Process::local | spawn | {spawn, Node::atom()},
+%%                      Setup::() -> R::any(),
 %%                      Cleanup::(R::any()) -> any(),
 %%                      [tests() | Instantiator]
 %%            }
-%%          | {foreachx, Setup::(X::any()) -> R::any(),
+%%          | {foreach, Setup, Cleanup, [tests() | Instantiator]}
+%%          | {foreach, Setup, [tests() | Instantiator]}
+%%          | {foreachx, Process::local | spawn | {spawn, Node::atom()},
+%%                       Setup::(X::any()) -> R::any(),
 %%                       Cleanup::(X::any(), R::any()) -> any(),
 %%                       Pairs::[{X::any(),
 %%                               (X::any(), R::any()) -> tests()}]
 %%            }
+%%          | {foreachx, Setup, Cleanup, Pairs}
+%%          | {foreachx, Setup, Pairs}
 %%
 %% SimpleTest = TestFunction | {Line::integer(), TestFunction}
 %%
@@ -174,34 +183,37 @@ next(Tests) ->
 
 parse({foreach, S, Fs}) when is_function(S), is_list(Fs) ->
     parse({foreach, S, fun (_) -> ok end, Fs});
-parse({foreach, S, C, Fs} = T)
+parse({foreach, S, C, Fs})
+  when is_function(S), is_function(C), is_list(Fs) ->
+    parse({foreach, ?DEFAULT_SETUP_PROCESS, S, C, Fs});
+parse({foreach, P, S, C, Fs} = T)
   when is_function(S), is_function(C), is_list(Fs) ->
     check_arity(S, 0, T),
     check_arity(C, 1, T),
     case eunit_lib:dlist_next(Fs) of
 	[F | Fs1] ->
-	    [{setup, S, C, F}, {foreach, S, C, Fs1}];
+	    [{setup, P, S, C, F}, {foreach, S, C, Fs1}];
 	[] ->
 	    []
     end;
 parse({foreachx, S1, Ps}) when is_function(S1), is_list(Ps) ->
     parse({foreachx, S1, fun (_, _) -> ok end, Ps});
-parse({foreachx, S1, C1, Ps} = T) 
+parse({foreachx, S1, C1, Ps})
+  when is_function(S1), is_function(C1), is_list(Ps) ->
+    parse({foreachx, ?DEFAULT_SETUP_PROCESS, S1, C1, Ps});
+parse({foreachx, P, S1, C1, Ps} = T) 
   when is_function(S1), is_function(C1), is_list(Ps) ->
     check_arity(S1, 1, T),
     check_arity(C1, 2, T),
     case eunit_lib:dlist_next(Ps) of
-	[P | Ps1] ->
-	    case P of
-		{X, F1} when is_function(F1) ->
-		    check_arity(F1, 2, T),
-		    S = fun () -> S1(X) end,
-		    C = fun (R) -> C1(X, R) end,
-		    F = fun (R) -> F1(X, R) end,
-		    [{setup, S, C, F}, {foreachx, S1, C1, Ps1}];
-		_ ->
-		    throw({bad_test, T})
-	    end;
+	[{X, F1} | Ps1] when is_function(F1) ->
+	    check_arity(F1, 2, T),
+	    S = fun () -> S1(X) end,
+	    C = fun (R) -> C1(X, R) end,
+	    F = fun (R) -> F1(X, R) end,
+	    [{setup, P, S, C, F}, {foreachx, S1, C1, Ps1}];
+	[_|_] ->
+	    bad_test(T);
 	[] ->
 	    []
     end;
@@ -221,7 +233,7 @@ parse({cmd, C} = T) ->
 	true ->
 	    parse(fun () -> ?cmd(C) end);
 	false ->
-	    throw({bad_test, T})
+	    bad_test(T)
     end;
 parse({inorder, T}) ->
     group(#group{tests = T, order = inorder});
@@ -233,11 +245,13 @@ parse({timeout, N, T}) when is_number(N), N >= 0 ->
     group(#group{tests = T, timeout = round(N * 1000)});
 parse({spawn, T}) ->
     group(#group{tests = T, spawn = local});
-parse({spawn, N, T}) ->
+parse({spawn, N, T}) when is_atom(N) ->
     group(#group{tests = T, spawn = {remote, N}});
 parse({setup, S, I}) when is_function(S) ->
     parse({setup, S, fun (_) -> ok end, I});
-parse({setup, S, C, I} = T)
+parse({setup, S, C, I}) when is_function(S), is_function(C) ->
+    parse({setup, ?DEFAULT_SETUP_PROCESS, S, C, I});
+parse({setup, P, S, C, I} = T)
   when is_function(S), is_function(C), is_function(I) ->
     check_arity(S, 0, T),
     check_arity(C, 1, T),
@@ -248,17 +262,24 @@ parse({setup, S, C, I} = T)
 	_ ->
 	    %% otherwise, I must be an instantiator function
 	    check_arity(I, 1, T),
+	    case P of
+		local -> ok;
+		spawn -> ok;
+		{spawn, N} when is_atom(N) -> ok;
+		_ -> bad_test(T)
+	    end,
 	    group(#group{tests = I,
-			 context = #context{setup = S, cleanup = C}})
+			 context = #context{setup = S, cleanup = C,
+					    process = P}})
     end;
-parse({setup, S, C, T}) when is_function(S), is_function(C) ->
-    parse({setup, S, C, fun (_) -> T end});
+parse({setup, P, S, C, T}) when is_function(S), is_function(C) ->
+    parse({setup, P, S, C, fun (_) -> T end});
 parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->
 	    group(#group{tests = T1, desc = S});
 	false ->
-	    throw({bad_test, T})
+	    bad_test(T)
     end;
 parse(T) when is_tuple(T), size(T) > 2, is_list(element(1, T)) ->
     [S | Es] = tuple_to_list(T),
@@ -282,15 +303,18 @@ parse_function(F) when is_function(F) ->
 parse_function({M,F}) when is_atom(M), is_atom(F) ->
     #test{f = eunit_test:function_wrapper(M, F), module = M, name = F};
 parse_function(F) ->
-    throw({bad_test, F}).
+    bad_test(F).
 
 check_arity(F, N, T) ->
     case erlang:fun_info(F, arity) of
 	{arity, N} ->
 	    ok;
 	_ ->
-	    throw({bad_test, T})
+	    bad_test(T) 
     end.
+
+bad_test(T) ->
+    throw({bad_test, T}).
 
 %% This does some look-ahead and folds nested groups and tests where
 %% possible. E.g., {String, Test} -> Test#test{desc = String}.
@@ -384,8 +408,13 @@ get_module_tests(M) ->
 %% @throws {ErrorType, eunit_lib:exception()}
 %% ErrorType = setup_failed | instantiation_failed | cleanup_failed
 
-enter_context(#context{setup = S, cleanup = C}, I, F) ->
-    eunit_test:enter_context(S, C, I, F).
+enter_context(#context{setup = S, cleanup = C, process = P}, I, F) ->
+    F1 = case P of
+	     local -> F;
+	     spawn -> fun (X) -> F({spawn, X}) end;
+	     {spawn, N} -> fun (T) -> F({spawn, N, T}) end
+	 end,
+    eunit_test:enter_context(S, C, I, F1).
 
 
 %% ---------------------------------------------------------------------
@@ -421,12 +450,8 @@ list_loop(I) ->
 		    [{item, Id, desc_string(T#test.desc), Name}
 		     | list_loop(I1)];
 		#group{context = Context} ->
-		    F = case Context of
-			    #context{} -> fun list_context/2;
-			    _ -> fun list/2
-			end,
 		    [{group, Id, desc_string(T#group.desc),
-		      F(T#group.tests, Id)}
+		      list_context(Context, T#group.tests, Id)}
 		     | list_loop(I1)]
 	    end;
  	none ->
@@ -436,9 +461,18 @@ list_loop(I) ->
 desc_string(undefined) -> "";
 desc_string(S) -> S.
 
-list_context(T, ParentId) ->
+list_context(undefined, T, ParentId) ->
+    list(T, ParentId);
+list_context(#context{process = local}, T, ParentId) ->
+    browse_context(T, fun (T) -> list(T, ParentId) end);
+list_context(#context{process = spawn}, T, ParentId) ->
+    browse_context(T, fun (T) -> list({spawn, T}, ParentId) end);
+list_context(#context{process = {spawn, N}}, T, ParentId) ->
+    browse_context(T, fun (T) -> list({spawn, N, T}, ParentId) end).
+
+browse_context(T, F) ->
     try
- 	eunit_test:browse_context(T, fun (T) -> list(T, ParentId) end)
+ 	eunit_test:browse_context(T, F)
     catch
  	R = instantiation_failed ->
  	    throw(R)
