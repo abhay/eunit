@@ -235,7 +235,7 @@ parse({spawn, T}) ->
     group(#group{tests = T, spawn = local});
 parse({spawn, N, T}) ->
     group(#group{tests = T, spawn = {remote, N}});
-parse({setup, S, I}) when is_function(S), is_function(I) ->
+parse({setup, S, I}) when is_function(S) ->
     parse({setup, S, fun (_) -> ok end, I});
 parse({setup, S, C, I} = T)
   when is_function(S), is_function(C), is_function(I) ->
@@ -296,7 +296,9 @@ check_arity(F, N, T) ->
 %% possible. E.g., {String, Test} -> Test#test{desc = String}.
 
 group(#group{context = #context{}} = G) ->
-    %% leave as it is - the test body is not suitable for lookahead
+    %% leave as it is - the test body is an instantiator, which is not
+    %% suitable for lookahead (and anyway, properties of the setup
+    %% should not be merged with properties of its body, e.g. spawn)
     G;
 group(#group{tests = T0, desc = Desc, order = Order, context = Context,
 	     spawn = Spawn, timeout = Timeout} = G) ->
