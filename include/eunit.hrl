@@ -17,28 +17,22 @@
 %%
 %% Copyright (C) 2004-2006 Mickaël Rémond, Richard Carlsson
 
+%% Including this file turns on testing, unless explicitly disabled by
+%% defining NOTEST. If both NOTEST and TEST are defined, then TEST takes
+%% precedence, and NOTEST will become undefined. The macro EUNIT will be
+%% defined if and only if TEST is defined, after including this file.
+
 -ifndef(EUNIT_HRL).
 -define(EUNIT_HRL, true).
 
-%% allow defining EUNIT as a synonym for defining TEST
--ifdef(EUNIT).
--ifndef(TEST).
--define(TEST, true).
--endif.
--endif.
-
-%% allow defining TEST to disable NOTEST, if NOTEST is used as default
+%% allow defining TEST to override NOTEST
 -ifdef(TEST).
 -undef(NOTEST).
 -endif.
 
-%% note that the main switch is NOTEST; however, both TEST and EUNIT may
-%% be used to check whether testing is enabled, and can be defined
-%% before this file is read to control whether NOTEST should be defined
--ifdef(NOTEST).
--undef(TEST).
--undef(EUNIT).
--else.
+%% note that the main switch used within this file is NOTEST; however,
+%% both TEST and EUNIT may be used to check whether testing is enabled
+-ifndef(NOTEST).
 -ifndef(TEST).
 -define(TEST, true).
 -endif.
@@ -54,12 +48,14 @@
 %% exporting local variables, and furthermore we only use variable names
 %% prefixed with "__", that hopefully will not be bound outside the fun.
 
--undef(assert).
 -ifdef(NOTEST).
+-ifndef(assert).
 -define(assert(BoolExpr),ok).
+-endif.
 -else.
 %% The assert macro is written the way it is so as not to cause warnings
 %% for clauses that cannot match, even if the expression is a constant.
+-undef(assert).
 -define(assert(BoolExpr),
 	((fun () ->
 	    case (BoolExpr) of

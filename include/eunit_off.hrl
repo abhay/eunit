@@ -17,20 +17,14 @@
 %%
 %% Copyright (C) 2006 Richard Carlsson
 
-%% including this file turns off testing unless explicitly turned on
+%% Including this file turns off testing unless explicitly enabled by
+%% defining TEST or EUNIT. If both NOTEST and TEST (or EUNIT) are
+%% defined, then TEST/EUNIT takes precedence, and NOTEST will become
+%% undefined.
 
-%% allow defining EUNIT as a synonym for defining TEST
--ifdef(EUNIT).
--ifndef(TEST).
--define(TEST, true).
--endif.
--endif.
-
-%% set NOTEST unless TEST is defined, then read eunit.hrl
--ifndef(TEST).
+%% set NOTEST, then read eunit.hrl
 -ifndef(NOTEST).
 -define(NOTEST, true).
--endif.
 -endif.
 %% Since this file is normally included with include_lib, it must in its
 %% turn use include_lib to read any other header files, at least until
