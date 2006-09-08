@@ -48,7 +48,17 @@
 %% exporting local variables, and furthermore we only use variable names
 %% prefixed with "__", that hopefully will not be bound outside the fun.
 
+%% A generic let-macro is particularly useful when writing test cases.
+%% It is more compact than 'begin X = Y, Z end', and guarantees that
+%% X gets a new, local binding.
+%% (Note that lowercase 'let' is a reserved word.)
+-ifndef(LET).
+-define(LET(X,Y,Z), ((fun(X)->(Z)end)(Y))).
+-endif.
+
 -ifdef(NOTEST).
+%% The plain assert macro should be defined to do nothing if this file
+%% is included when testing is turned off.
 -ifndef(assert).
 -define(assert(BoolExpr),ok).
 -endif.
