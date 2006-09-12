@@ -2,16 +2,216 @@
 
 	EUnit overview page
 
-@title EUnit - Easy unit testing for Erlang
+@title EUnit - a Lightweight Unit Testing Framework for Erlang
 
-@author Mickaël Rémond <mickael.remond@process-one.net> 
-        [http://www.process-one.net/]
 @author Richard Carlsson <richardc@it.uu.se>
         [http://user.it.uu.se/~richardc/]
+@author Mickaël Rémond <mickael.remond@process-one.net> 
+        [http://www.process-one.net/]
 @copyright 2004-2006 Mickaël Rémond, Richard Carlsson
 @version {@vsn}, {@date} {@time}
-@doc The EUnit framework makes it extremely easy to write unit tests in
-Erlang.
 
-== This is a Heading ==
-=== This is a Sub-Heading ===
+@doc EUnit is a unit testing framework for Erlang. It is very powerful
+and flexible, but is easy to use and has small syntactical overhead.
+
+<ul>
+<li>{@section Unit Testing}</li>
+<li>{@section Terminology}</li>
+<li>{@section Getting started}</li>
+<li>{@section EUnit macros}</li>
+</ul>
+
+EUnit builds on ideas from the family of unit testing frameworks for
+Object Oriented languages that originated with JUnit by Beck and Gamma
+(and Beck's previous framework SUnit for Smalltalk). However, EUnit uses
+techniques more adapted to functional and concurrent programming, and is
+typically less verbose than its relatives.
+
+== Unit Testing ==
+
+Unit Testing is testing of individual program "units" in relative
+isolation. There is no particular size requirement: a unit can be a
+function, a module, a process, or even a whole application, but the most
+typical testing units are individual functions or modules. In order to
+test a unit, you specify a set of individual tests, set up the smallest
+necessary environment for being able to run those tests (often, you
+don't need to do any setup at all), you run the tests and collect the
+results, and finally you do any necessary cleanup so that the test can
+be run again later. A Unit Testing Framework tries to help you in each
+stage of this process, so that it is easy to write tests, easy to run
+them, and easy to see which tests failed (so you can fix the bugs).
+
+=== Advantages of unit testing ===
+
+<dl>
+  <dt>Reduces the risks of changing the program</dt>
+  <dd>Most programs will be modified during their lifetime: bugs will be
+  fixed, features will be added, optimizations may become necessary, or
+  the code will need to be refactored or cleaned up in other ways to
+  make it easier to work with. But every change to a working program is
+  a risk of introducing new bugs - or reintroducing bugs that had
+  previously been fixed. Having a set of unit tests that you can run
+  with very little effort makes it easy to know that the code still
+  works as it should (this use is called <em>regression testing</em>;
+  see {@section Terminology}). This goes a long way to reduce the
+  resistance to changing and refactoring code.</dd>
+  <dt>Helps guide and speed up the development process</dt>
+  <dd>By focusing on getting the code to pass the tests, the programmer
+  can become more productive, not overspecify or get lost in premature
+  optimizations, and create code that is correct from the very beginning
+  (so-called <em>test-driven development</em>; see {@section
+  Terminology}).</dd>
+  <dt>Helps separate interface from implementation</dt>
+  <dd>When writing tests, the programmer may discover dependencies
+  (in order to get the tests to run) that ought not to be there, and
+  which need to be abstracted away to get a cleaner design. This helps
+  eliminate bad dependencies before they spread throughout the
+  code.</dd>
+  <dt>Makes component integration easier</dt>
+  <dd>By testing in a bottom-up fashion, beginning with the smallest
+  program units and creating a confidence in that they work as they
+  should, it becomes easier to test that a higher-level component,
+  consisting of several such units, also behaves according to
+  specification (known as <em>integration testing</em>; see {@section
+  Terminology}).</dd>
+  <dt>Is self-documenting</dt>
+  <dd>The tests can be read as documentation, typically showing both
+  examples of correct and incorrect usage, along with the expected
+  consequences.</dd>
+</dl>
+
+== Terminology ==
+
+<dl>
+  <dt>Unit testing</dt>
+  <dd>Testing that a program unit behaves as it is supposed to do (in
+  itself), according to its specifications. Unit tests have an important
+  function as regression tests, when the program later is modified for
+  some reason, since they check that the program still behaves according
+  to specification.</dd>
+  <dt>Regression testing</dt>
+  <dd>Running a set of tests after making changes to a program, to check
+  that the program behaves as it did before the changes (except, of
+  course, for any intentional changes in behaviour). Unit tests are
+  important as regression tests, but regression testing can involve more
+  than just unit testing, and may also test behaviour that might not be
+  part of the normal specification (such as bug-for-bug-compatibility).
+  </dd>
+  <dt>Integration testing</dt>
+  <dd>Testing that a number of individually developed program units
+  (assumed to already have been separately unit tested) work together as
+  expected. Depending on the system being developed, integration testing
+  may be as simple as "just another level of unit testing", but might
+  also involve other kinds of tests (compare <em>system testing</em>).
+</dd>
+  <dt>System testing</dt>
+  <dd>Testing that a complete system behaves according to its
+  specification. Specifically, system testing should not require knowing
+  any details about the implementation. It typically involves testing
+  many different aspects of the system behaviour apart from the basic
+  functionality, such as performance, usability, and reliability.</dd>
+  <dt>Test-driven development</dt>
+  <dd>A program development technique where you continuously write tests
+  <em>before</em> you implement the code that is supposed to pass those
+  tests. This can help you focus on solving the right problems, and not
+  make a more complicated implementation than necessary, by letting the
+  unit tests determine when a program is "done": if it fulfils its
+  specifications, there is no need to keep adding functionality.</dd>
+  <dt>Mock object</dt>
+  <dd>Sometimes, testing some unit `A' (e.g., a function) requires that
+  it collaborates somehow with some other unit `B' (perhaps being passed
+  as an argument, or by reference) - but `B' has not been implemented
+  yet. A "mock object" - an object which, for the purposes of testing
+  `A', looks and behaves like a real `B' - might then be used instead.
+  (This is of course only useful if it would be significantly more work
+  to implement a real `B' than to create a mock object.)</dd>
+  <dt>Test case</dt>
+  <dd>A single, well-defined test, that somehow can be uniquely
+  identified. When executed, the test case either <em>passes</em> or
+  <em>fails</em>; the test report should identify exactly which test
+  cases failed.</dd>
+  <dt>Test suite</dt>
+  <dd>A collection of test cases, generally with a specific, common
+  target for testing, such as a single function, module, or subsystem. A
+  test suite may also be recursively composed by smaller test
+  suites.</dd>
+</dl>
+
+== Getting started ==
+
+The EUnit framework makes it extremely easy to write unit tests in
+Erlang. The simplest way to use EUnit in an Erlang module is to add the
+following line at the beginning of the module (before any function
+definitions, but after all other module-level declarations such as
+`-module', `-export', and `-import' declarations:
+```-include_lib("eunit/include/eunit_test.hrl").'''
+
+This will have the following effect:
+<ul>
+  <li>Creates an exported function `test()' (unless testing is turned
+  off), that can be used to run all the unit tests defined in the
+  module</li>
+  <li>Causes all functions whose names match `..._test()' or `..._test_()'
+  to be automatically exported from the module (unless testing is
+  turned off)</li>
+  <li>Makes all the preprocessor macros of EUnit available, to help
+  writing tests</li>
+</ul>
+
+Testing can be turned off by defining the `NOTEST' macro when compiling,
+for example as an option to `erlc', as in:
+```erlc -DNOTEST my_module.erl'''
+or by adding a macro definition to the code, <em>before any EUnit header
+file is included</em>:
+```-define(NOTEST, 1).'''
+(the value is not important, but should typically be 1 or `true').
+
+
+== EUnit macros ==
+
+Although all the functionality of EUnit is avaliable even without the
+use of preprocessor macros, the EUnit header files define a number of
+such macros in order to make it as easy as possible to write unit tests
+as compactly as possible and without getting too many details in the
+way.
+
+<dl>
+<dt>`EUNIT'</dt>
+<dd>This macro is always defined to `true' whenever EUnit is enabled at
+compile time. This is typically used to place testing code within
+conditional compilation, as in:
+```-ifdef(EUNIT).
+       % test code here
+       ...
+   -endif.'''
+e.g., in order to eliminate compiler warnings about unused functions
+when testing is turned off. See also the macros `TEST' and `NOTEST'.
+</dd>
+<dt>`TEST'</dt>
+<dd>This macro is always defined (to `true', unless previously defined
+by the user to have another value) whenever EUnit is enabled at compile
+time. This can be used to place testing code within conditional
+compilation; see also the macros `NOTEST' and `EUNIT'.
+
+For testing code that is strictly dependent on EUnit, it may be
+preferable to use the `EUNIT' macro for this purpose, while for code
+that uses more generic testing conventions, using the `TEST' macro may
+be preferred.
+
+The `TEST' macro can also be used to override the `NOTEST' macro. If
+`TEST' is defined <em>before</em> any of the EUnit header files are
+included (even if `NOTEST' is also defined), then the code will be
+compiled with EUnit enabled.
+</dd>
+<dt>`NOTEST'</dt>
+<dd>This macro is always defined (to `true', unless previously defined
+by the user to have another value) whenever EUnit is <em>disabled</em>
+at compile time. (Compare the `TEST' macro.)
+
+This macro can also be used for conditional compilation, but is more
+typically used to disable testing: If `NOTEST' is defined
+<em>before</em> any of the EUnit header files are included, and `TEST'
+is <em>not</em> defined, then the code will be compiled with EUnit
+disabled.
+</dd>
+</dl>
