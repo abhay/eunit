@@ -2,58 +2,55 @@
 Concepts and features
 ---------------------
 
- - separation of tests and test runners (different ways of reporting)
+ - Separation of tests and test runners (different ways of reporting)
 
-   * tests represented by data structures
-   * traversal and execution are separated
+   * Tests are represented by data structures
+   * Traversal and execution are separated
 
- - test engine as a producer/iterator: run next, step back, repeat...
+ - Test engine as a producer/iterator: run next, step back, repeat...
 
-   * iterators working
-   * TODO: need to be able to stop after N failures
+   * Iterators working
+   * TODO: Need to be able to stop after N failures
 
- - test module - a container (as in 'eunit:run(M)'); automatic test collection
+ - Test module - a container (as in 'eunit:run(M)'); automatic test collection
 
-   * works; a module name can be used to represent its set of tests.
+   * Works; a module name can be used to represent its set of tests.
 
- - single tests (exported nullary functions, to be called directly)
+ - Single tests (exported nullary functions, to be called directly)
 
-   * works; has drawbacks (no comments, context, or order, many
+   * Works; has drawbacks (no comments, context, or order, many
      functions)
 
- - abstraction of tests, for reuse
+ - Abstraction of tests, for reuse
 
-   * tests are just nullary funs; this is both simple and powerful
-   * you can use 'fun name/arity' or 'fun module:name/arity' for sharing code
-   * generator functions are used to create specialized test funs
+   * Tests are just nullary funs; this is both simple and powerful
+   * You can use 'fun name/arity' or 'fun module:name/arity' for sharing code
+   * Generator functions are used to create specialized test funs
 
- - executing a test by calling directly should have observable
+ - Executing a test by calling directly should have observable
    failure/success, and tests should not in themselves output test
    results to console or otherwise
 
-   * tests succeed by returning properly (any return value)
+   * Tests succeed by returning properly (any return value)
+   * Tests fail by throwing an exception (any exception)
 
-   * tests fail by throwing an exception (any exception)
+ - It should be possible to run single tests without eunit runtime support
 
- - it should be possible to run single tests without eunit runtime support
-
-   * just apply a test function to an empty argument list and see if it
+   * Just apply a test function to an empty argument list and see if it
      throws an exception or not
-
-   * more complex test representations (grouping, setup/teardown etc.)
+   * More complex test representations (grouping, setup/teardown etc.)
      need eunit support functions
 
- - it should be possible to write tests without requiring eunit headers
+ - It should be possible to write tests without requiring eunit headers
 
-   * using plain tuples, funs, atoms, and lists to represent tests; not
+   * Using plain tuples, funs, atoms, and lists to represent tests; not
      more difficult, just less convenient.
 
- - tests are identified by: module/sourcefile, test function name, and
+ - Tests are identified by: module/sourcefile, test function name, and
    line number (if available)
 
-   * this is also used in listings of test sets
-
-   * funs have useful metadata, which allows most of the identifying
+   * This is also used in listings of test sets
+   * Funs have useful metadata, which allows most of the identifying
      info to be extracted automatically
 
  - Test functions must be identified as either directly callable or as
@@ -72,114 +69,117 @@ Concepts and features
      functions. The underscore just before the opening parenthesis makes
      it more visible than most other variants.
 
- - conditional compilation of test code
+ - Conditional compilation of test code
 
-   * defining the NOTEST macro is used to disable testing code; this is
+   * Defining the NOTEST macro is used to disable testing code; this is
      used by all the eunit header files.
-   * testing can be disabled by default by including eunit_off.hrl
+   * Testing can be disabled by default by including eunit_off.hrl
      instead of eunit.hrl, or before any other eunit header file; then,
      defining the TEST macro externally will enable the testing code.
+     The same effect is achieved by defining NOTEST before including
+     eunit.hrl or any other eunit header file, but using eunit_off.hrl
+     is always independent of the actual macro name used for control.
 
- - exporting test functions manually is annoying and easy to forget
+ - Exporting test functions manually is annoying and easy to forget
 
-   * writing '-include_lib("eunit/include/eunit_auto.hrl").' inserts a
+   * Writing '-include_lib("eunit/include/eunit_auto.hrl").' inserts a
      parse transform (unless NOTEST is defined) which automatically
      exports functions identified as test functions with the proper
      suffixes and arity. Also includes eunit.hrl automatically.
 
- - decorating a normal module with common eunit entry functions
+ - Decorating a normal module with common eunit entry functions
 
-   * writing '-include_lib("eunit/include/eunit_test.hrl").' inserts an
+   * Writing '-include_lib("eunit/include/eunit_test.hrl").' inserts an
      exported 'test/0' function and includes eunit_auto.hrl (unless
      NOTEST is defined)
 
- - label of a single test
+ - Label of a single test
 
    * {"...", Test}, also works for groups.
 
- - context of a single test; set up and tear down of context; multiple
+ - Context of a single test; set up and tear down of context; multiple
    tests within same context (single set up/tear down)
 
    * {setup, Setup, Teardown, Generator}
    * {setup, Setup, Generator} works as a simple let-binding
 
- - multiple tests using same context (individual set up/tear down)
+ - Multiple tests using same context (individual set up/tear down)
 
    * {foreach, Setup, Teardown, [Generator]}
      {foreach1, Setup, Teardown, [{Arg, Generator}]}
 
- - aggregation of tests in an order-dependent sequence; aggregation of
+ - Aggregation of tests in an order-dependent sequence; aggregation of
    tests in explicitly parallel sets
 
    * {inorder, T} | {inparallel, T}
 
- - aggregation of tests in unspecified-order sets
+ - Aggregation of tests in unspecified-order sets
 
-   * deep lists represent generic test sets
+   * Deep lists represent generic test sets
 
- - test suite (as in 'eunit:make_suite(M)', 'eunit:run_suite(S)'); label
+ - Test suite (as in 'eunit:make_suite(M)', 'eunit:run_suite(S)'); label
    of a test suite; composition of test suites
 
-   * deep lists and {"label", DeepList} work fine for this purpose
+   * Deep lists and {"label", DeepList} work fine for this purpose
 
- - extra header files for better macro namespace separation (eunit_...)
+ - Extra header files for better macro namespace separation (eunit_...)
 
-   * seems to be overkill - the leading underscore in the normal macros
+   * Seems to be overkill - the leading underscore in the normal macros
      lessens the need for such double definitions
 
- - running tests in parallel
+ - Running tests in parallel
 
-   * works (also running N tests at a time)
-   * TODO: restructure to start new job as soon as slot is available
-   * TODO: cannot enumerate all tests in advance for really large sets
+   * Works (also running N tests at a time)
+   * TODO: Restructure to start new job as soon as slot is available
+   * TODO: Cannot enumerate all tests in advance for really large sets
 
- - running a test or set of tests in a new process (like setup/teardown)
+ - Running a test or set of tests in a new process (like setup/teardown)
 
-   * works
+   * Works
 
- - running tests on a separate (existing) node
+ - Running tests on a separate (existing) node
 
-   * implemented as {spawn, Node, Tests}: assuming a specific node
+   * Implemented as {spawn, Node, Tests}: assuming a specific node
      exists, run a set of tests on that node, rather than locally, the
      main idea being that a number of test sets could be run in parallel
      on separate machines (and maybe none are run locally)
 
- - running OS commands, testing output and result values
+ - Running OS commands, testing output and result values
 
-   * works
-   * TODO: better Windows support; CRLF handling
-   * TODO: is it possible to capture stderr separately somehow?
+   * Works
+   * TODO: Better Windows support; CRLF handling
+   * TODO: Is it possible to capture stderr separately somehow?
 
- - starting one or more additional nodes to run tests or suites on
+ - Starting one or more additional nodes to run tests or suites on
 
-   * TODO: this could be done by a user through the setup/teardown
+   * TODO: This could be done by a user through the setup/teardown
      feature, but would require a fair amount of code. It would be
      easier if there was some basic support for doing this with minimal
      effort.
 
- - whole-application testing (using .app files?)
+ - Whole-application testing (using .app files?)
 
-   * TODO: think more about testing whole applications
+   * TODO: Think more about testing whole applications
 
- - identification of tests within a test set (e.g., which succeeded,
+ - Identification of tests within a test set (e.g., which succeeded,
    which failed, repeating selected tests or groups of tests, etc.)
 
-   * the numbering scheme in listings take care of this point
+   * The numbering scheme in listings take care of this point
 
- - running EUnit from command line, as a standalone tool
+ - Running EUnit from command line, as a standalone tool
 
-   * TODO: command line interface similar to that of edoc
+   * TODO: Command line interface similar to that of edoc
 
- - open source (licensed under the GNU Lesser General Public Licence)
+ - Open source (licensed under the GNU Lesser General Public Licence)
 
-   * header files can be used without tainting, according to LGPL
+   * Header files can be used without tainting, according to LGPL
 
- - marking tests as known failures, for handling known bugs
+ - Marking tests as known failures, for handling known bugs
 
-   * TODO: known-failure is necessary to avoid writing "inverted-logic" tests
-   * TODO: is it possible to handle known timout/setup failures?
+   * TODO: Known-failure is necessary to avoid writing "inverted-logic" tests
+   * TODO: Is it possible to handle known timout/setup failures?
 
- - diagnostic tests which never fail, but may cause warnings
+ - Diagnostic tests which never fail, but may cause warnings
 
 Assorted notes which may or may not be useful, e.g. for documentation
 ---------------------------------------------------------------------
@@ -191,12 +191,12 @@ and vice versa. At the same time, it should be possible for a module to
 export test functions for private functions, and to have these tests
 conditionally compiled (use -ifdef(EUNIT) or -ifdef(TEST) for this).
 
-pyunit uses 'failIf' and 'failUnless' as standard test names, and
+Pyunit uses 'failIf' and 'failUnless' as standard test names, and
 'assert' as a synonym for 'failUnless'. I have settled on 'assert' and
 'assertNot' as the standard names. Maybe I'll add 'failUnless' and
 'failIf' as synonyms, if users ask for it.
 
-Junit/pyunit get a lot of context embedding for free due to the object
+Junit/Pyunit get a lot of context embedding for free due to the object
 oriented languages (using class members and inheritance); in Erlang,
 context must be passed to tests as arguments or through local variable
 bindings if there are multiple tests within a function clause. This is
