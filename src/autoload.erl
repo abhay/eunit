@@ -15,6 +15,7 @@
 %%
 %% $Id:$ 
 %%
+%% @private (for now)
 %% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
 %% @doc Erlang automatic code loading service
