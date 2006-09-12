@@ -139,8 +139,9 @@ them, and easy to see which tests failed (so you can fix the bugs).
 
 == Getting started ==
 
-The EUnit framework makes it extremely easy to write unit tests in
-Erlang. The simplest way to use EUnit in an Erlang module is to add the
+=== Including the EUnit header file ===
+
+The simplest way to use EUnit in an Erlang module is to add the
 following line at the beginning of the module (before any function
 definitions, but after all other module-level declarations such as
 `-module', `-export', and `-import' declarations:
@@ -157,6 +158,54 @@ This will have the following effect:
   <li>Makes all the preprocessor macros of EUnit available, to help
   writing tests</li>
 </ul>
+
+=== Writing simple test functions ===
+
+The EUnit framework makes it extremely easy to write unit tests in
+Erlang. There are a few different ways of writing them, though, so we
+start with the simplest:
+
+A function with a name ending in `..._test()' is recognized by EUnit as
+a simple test function - it takes no arguments, and its execution either
+succeeds (returning some arbitrary value that EUnit will throw away), or
+fails by throwing an exception of some kind (or by not terminating, in
+which case it will be aborted after a while).
+
+An example of a simple test function could be the following:
+```reverse_test() -> lists:reverse([1,2,3]).'''
+This just tests that the function `lists:reverse(List)' does not crash
+when `List' is `[1,2,3]'. It is not a great test, but many people write
+simple functions like this one to test the basic functionality of their
+code, and those tests can be used directly by EUnit, without changes,
+as long as their function names match.
+
+To write more interesting tests, we need to make them crash (throw an
+exception) when they don't get the result they expect. A simple way of
+doing this is to use pattern matching with `=', as in the following
+examples:
+```reverse_nil_test() -> [] = lists:reverse([]).
+   reverse_one_test() -> [1] = lists:reverse([1]).
+   reverse_two_test() -> [2,1] = lists:reverse([1,2]).
+'''
+If there was some bug in `lists:reverse/1' that made it return something
+other than `[2,1]' when it got `[1,2]' as input, then the last test
+above would throw a `badmatch' error. The first two (we assume they do
+not get a `badmatch') would simply return `[]' and `[1]', respectively,
+so both succeed. (Note that EUnit is not psychic: if you write a test
+that returns a value, even if it is the wrong value, EUnit will consider
+it a success. You must make sure that the test is written so that it
+causes a crash if the result is not what it should be.)
+
+If you want to use Boolean operators for your tests, the EUnit `assert'
+macro comes in handy:
+```length_test() -> ?assert(length([1,2,3]) == 3).'''
+The `?assert(Expression)' macro will evaluate `Expression', and if that
+does not evaluate to `true', it will throw an exception; otherwise it
+returns `ok'. In the above example, the test will thus fail if the call
+to `length' does not return 3.
+
+
+=== Disabling testing ===
 
 Testing can be turned off by defining the `NOTEST' macro when compiling,
 for example as an option to `erlc', as in:
