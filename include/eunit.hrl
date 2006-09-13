@@ -56,6 +56,14 @@
 -define(LET(X,Y,Z), ((fun(X)->(Z)end)(Y))).
 -endif.
 
+%% It is important that testing code is short and readable.
+%% An if-then-else macro can make some code much more compact.
+%% Compare:  case f(X) of true->g(X); false->h(X) end
+%%     and:  ?IF(f(X), g(Y), h(Z))
+-ifndef(IF).
+-define(IF(B,T,F), (case (B) of true->(T); false->(F) end)).
+-endif.
+
 -ifdef(NOTEST).
 %% The plain assert macro should be defined to do nothing if this file
 %% is included when testing is turned off.
