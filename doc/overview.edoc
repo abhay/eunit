@@ -145,6 +145,13 @@ them, and easy to see which tests failed (so you can fix the bugs).
 </dl>
 
 == Getting started ==
+<ul>
+  <li>{@section Including the EUnit header file}</li>
+  <li>{@section Writing simple test functions}</li>
+  <li>{@section Running EUnit}</li>
+  <li>{@section Writing test generating functions}</li>
+  <li>{@section Disabling testing}</li>
+</ul>
 
 === Including the EUnit header file ===
 
@@ -222,7 +229,8 @@ If you have added the `-include' declaration which includes the
 only need to compile the module, and run the automatically exported
 function `test()'. For example, if your module was named `m', then
 calling `m:test()' will run EUnit on all the tests defined in the
-module. This is done by magic.
+module. You do not need to write `-export' declarations for the test
+functions. This is done by magic.
 
 === Writing test generating functions ===
 
