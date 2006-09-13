@@ -27,6 +27,13 @@ Object Oriented languages that originated with JUnit by Beck and Gamma
 techniques more adapted to functional and concurrent programming, and is
 typically less verbose than its relatives.
 
+Although EUnit uses many preprocessor macros, they have been designed to
+be as nonintrusive as possible, and should not cause conflicts with
+existing code. Adding EUnit tests to a module should thus not normally
+require modifying code. Furthermore, tests that only excercise the
+exported functions of a module can always be placed in a completely
+separate module, avoiding any conflicts entirely.
+
 == Unit Testing ==
 
 Unit Testing is testing of individual program "units" in relative
@@ -179,6 +186,8 @@ simple functions like this one to test the basic functionality of their
 code, and those tests can be used directly by EUnit, without changes,
 as long as their function names match.
 
+==== Use exceptions to signal failure ====
+
 To write more interesting tests, we need to make them crash (throw an
 exception) when they don't get the result they expect. A simple way of
 doing this is to use pattern matching with `=', as in the following
@@ -196,13 +205,65 @@ that returns a value, even if it is the wrong value, EUnit will consider
 it a success. You must make sure that the test is written so that it
 causes a crash if the result is not what it should be.)
 
-If you want to use Boolean operators for your tests, the EUnit `assert'
-macro comes in handy:
+==== Using assert macros ====
+
+If you want to use Boolean operators for your tests, the `assert'
+macro comes in handy (see {@section EUnit macros} for details):
 ```length_test() -> ?assert(length([1,2,3]) == 3).'''
 The `?assert(Expression)' macro will evaluate `Expression', and if that
 does not evaluate to `true', it will throw an exception; otherwise it
-returns `ok'. In the above example, the test will thus fail if the call
-to `length' does not return 3.
+just returns `ok'. In the above example, the test will thus fail if the
+call to `length' does not return 3.
+
+=== Writing test generating functions ===
+
+A drawback of simple test functions is that you must write a separate
+function (with a separate name) for each test case. A more compact way
+of writing tests (and much more flexible, as we shall see), is to write
+functions that <em>return</em> tests, instead of <em>being</em> tests.
+
+A function with a name ending in `..._test_()' (note the final
+underscore) is recognized by EUnit as a <em>test generator</em>
+function. Test generators return a <em>representation</em> of a <em>set
+of tests</em> to be executed by EUnit.
+
+==== Representing a test as data ====
+
+The most basic representation of a test is a single fun-expression that
+takes no arguments. For example, the following test generator:
+```basic_test_() ->
+       fun () -> ?assert(1 + 1 == 2) end.'''
+will have the same effect as the following simple test:
+```simple_test() ->
+       ?assert(1 + 1 == 2).'''
+(in fact, EUnit will handle all simple tests just like it handles
+fun-expressions: it will put them in a list, and run them one by one).
+
+==== Using macros to write tests ====
+
+To make tests more compact and readable, as well as automatically add
+information about the line number in the source code where a test
+occurred (and reduce the number of characters you have to type), you can
+use the `_test' macro (note the initial underscore character), like
+this:
+```basic_test_() ->
+       ?_test(?assert(1 + 1 == 2)).'''
+The `_test' macro takes any expression (the "body") as argument, and
+places it within a fun-expression (along with some extra information).
+The body can be any kind of test expression, just like the body of a
+simple test function.
+
+==== Underscore-prefixed macros create test objects ====
+
+But this example can be made even shorter! Most test macros, such as the
+family of `assert' macros, have a corresponding form with an initial
+underscore character, which automatically adds a `?_test(...)' wrapper.
+The above example can then simply be written:
+```basic_test_() ->
+       ?_assert(1 + 1 == 2).'''
+which has exactly the same meaning (note the `_assert' instead of
+`assert'). You can think of the initial underscore as signalling
+<em>test object</em>.
 
 
 === Disabling testing ===
