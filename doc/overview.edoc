@@ -215,6 +215,15 @@ does not evaluate to `true', it will throw an exception; otherwise it
 just returns `ok'. In the above example, the test will thus fail if the
 call to `length' does not return 3.
 
+=== Running EUnit ===
+
+If you have added the `-include' declaration which includes the
+`eunit_test.hrl' header file to your module, as described above, you
+only need to compile the module, and run the automatically exported
+function `test()'. For example, if your module was named `m', then
+calling `m:test()' will run EUnit on all the tests defined in the
+module. This is done by magic.
+
 === Writing test generating functions ===
 
 A drawback of simple test functions is that you must write a separate
