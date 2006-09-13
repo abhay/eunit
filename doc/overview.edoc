@@ -224,6 +224,8 @@ such macros in order to make it as easy as possible to write unit tests
 as compactly as possible and without getting too many details in the
 way.
 
+=== Compilation control macros ===
+
 <dl>
 <dt>`EUNIT'</dt>
 <dd>This macro is always defined to `true' whenever EUnit is enabled at
@@ -263,4 +265,59 @@ typically used to disable testing: If `NOTEST' is defined
 is <em>not</em> defined, then the code will be compiled with EUnit
 disabled.
 </dd>
+</dl>
+
+=== Utility macros ===
+
+<dl>
+<dt>`assert(BoolExpr)'</dt>
+<dd>Evaluates the expression `BoolExpr', if testing is enabled. Unless
+the result is `true', an informative exception will be generated. If
+evaluation completes normally, the result of the macro expression is the
+atom `ok', regardless of the value of `BoolExpr'. If testing is
+disabled, the macro will not generate any code except the atom `ok', and
+`BoolExpr' will not be evaluated.
+
+Typical usage:
+```?assert(f(X, Y) == [])'''
+
+The `assert' macro can be used anywhere in a program, not just in unit
+tests, to check pre/postconditions and invariants. For example:
+```some_recursive_function(X, Y, Z) ->
+       ?assert(X + Y > Z),
+       ...'''
+</dd>
+<dt>`assertMatch(GuardedPattern, Expr)'</dt>
+<dd>Evaluates `Expr' and matches the result against `GuardedPattern', if
+testing is enabled. If the match fails, an informative exception will be
+generated; see the `assert' macro for further details. `GuardedPattern'
+can be anything that you can write on the left hand side of the `->'
+symbol in a case-clause, except that it cannot contain comma-separated
+guard tests.
+
+The main reason for using `assertMatch' also for simple matches, instead
+of matching with `=', is that it produces more detailed error messages.
+
+Examples:
+```?assertMatch({found, {fred, _}}, lookup(bloggs, Table))'''
+```?assertMatch([X|_] when X > 0, binary_to_list(B))'''
+</dd>
+<dt>`assertException(ClassPattern, TermPattern, Expr)'</dt>
+<dt>`assertError(TermPattern, Expr)'</dt>
+<dt>`assertExit(TermPattern, Expr)'</dt>
+<dt>`assertThrow(TermPattern, Expr)'</dt>
+<dd>Evaluates `Expr', catching any exception and testing that it matches
+the expected `ClassPattern:TermPattern'. If the match fails, or if no
+exception is thrown by `Expr', an informative exception will be
+generated; see the `assert' macro for further details. The
+`assertError', `assertExit', and `assertThrow' macros, are equivalent to
+using `assertException' with a `ClassPattern' of `error', `exit', or
+`throw', respectively.
+
+Examples:
+```?assertError(badarith, X/0)'''
+```?assertExit(foo, exit(foo))'''
+```?assertException(throw, {foo, _}, throw({foo, 42}))'''
+</dd>
+
 </dl>
