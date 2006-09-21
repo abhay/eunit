@@ -157,16 +157,15 @@ them, and easy to see which tests failed (so you can fix the bugs).
 === Including the EUnit header file ===
 
 The simplest way to use EUnit in an Erlang module is to add the
-following line at the beginning of the module (before any function
-definitions, but after all other module-level declarations such as
-`-module', `-export', and `-import' declarations:
-```-include_lib("eunit/include/eunit_test.hrl").'''
+following line at the beginning of the module (after the `-module'
+declaration, but before any function definitions):
+```-include_lib("eunit/include/eunit.hrl").'''
 
 This will have the following effect:
 <ul>
   <li>Creates an exported function `test()' (unless testing is turned
-  off), that can be used to run all the unit tests defined in the
-  module</li>
+  off, and the module does not already contain a test() function), that
+  can be used to run all the unit tests defined in the module</li>
   <li>Causes all functions whose names match `..._test()' or `..._test_()'
   to be automatically exported from the module (unless testing is
   turned off)</li>
@@ -225,11 +224,11 @@ call to `length' does not return 3.
 
 === Running EUnit ===
 
-If you have added the `-include' declaration which includes the
-`eunit_test.hrl' header file to your module, as described above, you
-only need to compile the module, and run the automatically exported
-function `test()'. For example, if your module was named `m', then
-calling `m:test()' will run EUnit on all the tests defined in the
+If you have added the declaration
+`-include_lib("eunit/include/eunit.hrl")' to your module, as described
+above, you only need to compile the module, and run the automatically
+exported function `test()'. For example, if your module was named `m',
+then calling `m:test()' will run EUnit on all the tests defined in the
 module. You do not need to write `-export' declarations for the test
 functions. This is all done by magic.
 
@@ -301,7 +300,7 @@ Sometimes, an example says more than a thousand words. The following
 small Erlang module shows how EUnit can be used in practice.
 ```-module(fib).
    -export([fib/1]).
-   -include_lib("eunit/include/eunit_test.hrl").
+   -include_lib("eunit/include/eunit.hrl").
 
    fib(0) -> 1;
    fib(1) -> 1;
