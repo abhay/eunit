@@ -72,11 +72,24 @@ macro_test_() ->
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assert(false),
- 		 {error,{error,{assertion_failed,_,false},_}} = run_testfun(F)
+ 		 {error,{error,{assertion_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,true},
+				 {value,false}]},
+			 _}}
+		     = run_testfun(F)
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assert([]),
- 		 {error,{error,{assertion_failed,_,{not_a_boolean,[]}},_}}
+ 		 {error,{error,{assertion_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,true},
+				 {value,{not_a_boolean,[]}}]},
+			 _}}
 		     = run_testfun(F)
  	     end),
       ?_test(begin
@@ -85,7 +98,29 @@ macro_test_() ->
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertNot(true),
- 		 {error,{error,{assertion_failed,_,false},_}} = run_testfun(F)
+ 		 {error,{error,{assertion_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,true},
+				 {value,false}]},
+			 _}}
+		     = run_testfun(F)
+ 	     end),
+      ?_test(begin
+ 		 {?LINE, F} = ?_assertMatch(ok, ok),
+ 		 {ok, ok} = run_testfun(F)
+ 	     end),
+      ?_test(begin
+ 		 {?LINE, F} = ?_assertMatch([_], []),
+ 		 {error,{error,{assertMatch_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,"[ _ ]"},
+				 {value,[]}]},
+			 _}}
+		     = run_testfun(F)
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarith,
@@ -94,16 +129,26 @@ macro_test_() ->
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarith, ok),
- 		 {error,{error,{assertException_failed,_,
-				{expected,_},{unexpected_success,ok}},_}}
+ 		 {error,{error,{assertException_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,_},
+				 {unexpected_success,ok}]},
+			 _}}
 		     = run_testfun(F)
  	     end),
       ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarg,
  						erlang:error(badarith)),
- 		 {error,{error,{assertException_failed,_,
-				{expected,_},{unexpected_exception,
-					      {error,badarith,_}}},_}}
+ 		 {error,{error,{assertException_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,_},
+				 {unexpected_exception,
+				  {error,badarith,_}}]},
+			 _}}
 		     = run_testfun(F)
  	     end)
      ]}.
