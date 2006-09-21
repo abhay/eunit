@@ -20,14 +20,12 @@
 -ifndef(EUNIT_AUTO_HRL).
 -define(EUNIT_AUTO_HRL, true).
 
+%% This is now equivalent to eunit.hrl, and will be removed soon.
+
 %% Since this file is normally included with include_lib, it must in its
 %% turn use include_lib to read any other header files, at least until
 %% the epp include_lib behaviour is fixed.
 -include_lib("eunit/include/eunit.hrl").
 %%-include("eunit.hrl").
-
--ifdef(EUNIT).
--compile({parse_transform, eunit_autoexport}).
--endif.
 
 -endif. % EUNIT_AUTO_HRL

@@ -41,6 +41,14 @@
 -endif.
 -endif.
 
+%% Parse transform for automatic exporting of test functions.
+
+-ifdef(EUNIT).
+-ifndef(EUNIT_NOAUTO).
+-compile({parse_transform, eunit_autoexport}).
+-endif.
+-endif.
+
 %% The macros should be available even if testing is turned off, and
 %% should preferably not require EUnit to be present at runtime.
 %% 

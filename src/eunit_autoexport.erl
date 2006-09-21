@@ -37,7 +37,7 @@ parse_transform(Forms, Options) ->
 		form(Form, Set, TestSuffix, GeneratorSuffix)
 	end,
     Tests = sets:to_list(lists:foldl(F, sets:new(), Forms)),
-    export(Forms, Tests).
+    rewrite(Forms, Tests).
 
 form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix) ->
     N = atom_to_list(Name),
@@ -60,9 +60,32 @@ form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix) ->
 form(_, Tests, _, _) ->
     Tests.
 
-export([{attribute,L,module,_}=M | Fs], Names) ->
-    [M, {attribute,L,export,Names} | Fs];
-export([F | Fs], Names) ->
-    [F | export(Fs, Names)];
-export([], _Names) ->
-    [].  % just a sane fallback for safety
+rewrite([{attribute,_,module,Name}=M | Fs], Exports) ->
+    Module = if is_atom(Name) -> Name;
+		true -> list_to_atom(packages:concat(Name))
+	     end,
+    {Fs1, Test} = rewrite(Fs, [], Module, true),
+    Es = if Test -> [{test,0} | Exports];
+	    true -> Exports
+	 end,
+    [M, {attribute,0,export,Es} | lists:reverse(Fs1)];
+rewrite([F | Fs], Exports) ->
+    [F | rewrite(Fs, Exports)];
+rewrite([], _Exports) ->
+    [].    %% fail-safe, in case there is no module declaration
+
+rewrite([{function,_,test,0,_}=F | Fs], As, Module, Test) ->
+    rewrite(Fs, [F | As], Module, false);
+rewrite([F | Fs], As, Module, Test) ->
+    rewrite(Fs, [F | As], Module, Test);
+rewrite([], As, Module, Test) ->
+    {if Test ->
+	     [{function,0,test,0,
+	       [{clause,0,[],[],
+		 [{call,0,{remote,0,{atom,0,eunit},{atom,0,test}},
+		   [{atom,0,Module}]}]}]}
+	      | As];
+	true ->
+	     As
+     end,
+     Test}.

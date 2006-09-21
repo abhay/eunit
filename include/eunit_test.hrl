@@ -20,15 +20,12 @@
 -ifndef(EUNIT_TEST_HRL).
 -define(EUNIT_TEST_HRL, true).
 
+%% This is now equivalent to eunit.hrl, and will be removed soon.
+
 %% Since this file is normally included with include_lib, it must in its
 %% turn use include_lib to read any other header files, at least until
 %% the epp include_lib behaviour is fixed.
--include_lib("eunit/include/eunit_auto.hrl").
-%%-include("eunit_auto.hrl").
-
--ifdef(EUNIT).
--export([test/0]).
-test() -> eunit:test(?MODULE).
--endif.
+-include_lib("eunit/include/eunit.hrl").
+%%-include("eunit.hrl").
 
 -endif. % EUNIT_TEST_HRL
