@@ -29,8 +29,6 @@ OBJECTS=$(SOURCES:%.erl=$(EBIN)/%.$(EMULATOR)) $(APP_TARGET) $(APPUP_TARGET)
 all: $(OBJECTS)
 
 $(OBJECTS): eunit_internal.hrl \
-	$(INCLUDE)/eunit_auto.hrl \
-	$(INCLUDE)/eunit_test.hrl \
 	$(INCLUDE)/eunit.hrl 
 
 clean:
