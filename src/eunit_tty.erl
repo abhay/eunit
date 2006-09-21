@@ -28,9 +28,6 @@
 
 -export([start/1, start/2]).
 
-%% EUnit self-testing 
--include("eunit_test.hrl").
-
 
 -record(state, {verbose = false,
 		succeed = 0,

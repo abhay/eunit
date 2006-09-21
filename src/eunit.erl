@@ -39,9 +39,6 @@
 
 -export([testp/1]). %% for development testing, not official
 
-%% Self-testing
--include("eunit_test.hrl").
-
 
 -ifdef(TEST).
 %% Cause all the other modules to be tested as well as this one.

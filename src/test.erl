@@ -13,8 +13,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--include_lib("eunit/include/eunit_test.hrl").
-
 succeed() ->
     ok.
 

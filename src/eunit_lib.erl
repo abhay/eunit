@@ -34,9 +34,6 @@
 	 browse_fun/1, command/1, command/2, command/3,
 	 trie_new/0, trie_store/2, trie_match/2]).
 
-%% EUnit self-testing 
--include("eunit_test.hrl").
-
 
 %% Type definitions for describing exceptions
 %%

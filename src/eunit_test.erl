@@ -31,10 +31,6 @@
 -include("eunit_internal.hrl").
 
 
-%% EUnit self-testing 
--include("eunit_test.hrl").
-
-
 %% ---------------------------------------------------------------------
 %% Test runner
 
