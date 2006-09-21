@@ -81,17 +81,12 @@ Concepts and features
      is always independent of the actual macro name used for control.
 
  - Exporting test functions manually is annoying and easy to forget
-
-   * Writing '-include_lib("eunit/include/eunit_auto.hrl").' inserts a
-     parse transform (unless NOTEST is defined) which automatically
-     exports functions identified as test functions with the proper
-     suffixes and arity. Also includes eunit.hrl automatically.
-
  - Decorating a normal module with common eunit entry functions
 
-   * Writing '-include_lib("eunit/include/eunit_test.hrl").' inserts an
-     exported 'test/0' function and includes eunit_auto.hrl (unless
-     NOTEST is defined)
+   * Including eunit.hrl inserts a parse transform (unless NOTEST or
+     EUNIT_NOAUTO is defined) which automatically exports functions
+     identified as test functions with the proper suffixes and arity,
+     and adds a test/0 function to the module (unless it exists).
 
  - Label of a single test
 
