@@ -44,7 +44,7 @@
 %%          | {cmd, C}
 %%          | {spawn, tests()}
 %%          | {spawn, Node::atom(), tests()}
-%%          | {timeout, tests()}
+%%          | {timeout, T::number(), tests()}
 %%          | {inorder, tests()}
 %%          | {inparallel, tests()}
 %%          | {inparallel, N::integer(), tests()}
@@ -54,8 +54,8 @@
 %%                    tests() | Instantiator
 %%            }
 %%          | {setup, Setup, Cleanup, tests() | Instantiator}
-%%          | {setup, Process, Setup, tests() | Instantiator }
-%%          | {setup, Setup, tests() | Instantiator }
+%%          | {setup, Process, Setup, tests() | Instantiator}
+%%          | {setup, Setup, tests() | Instantiator}
 %%          | {foreach, Process::local | spawn | {spawn, Node::atom()},
 %%                      Setup::() -> R::any(),
 %%                      Cleanup::(R::any()) -> any(),
