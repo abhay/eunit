@@ -74,7 +74,7 @@ rewrite([F | Fs], Exports) ->
 rewrite([], _Exports) ->
     [].    %% fail-safe, in case there is no module declaration
 
-rewrite([{function,_,test,0,_}=F | Fs], As, Module, Test) ->
+rewrite([{function,_,test,0,_}=F | Fs], As, Module, _Test) ->
     rewrite(Fs, [F | As], Module, false);
 rewrite([F | Fs], As, Module, Test) ->
     rewrite(Fs, [F | As], Module, Test);
