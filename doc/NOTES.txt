@@ -147,10 +147,8 @@ Concepts and features
 
  - Starting one or more additional nodes to run tests or suites on
 
-   * TODO: This could be done by a user through the setup/teardown
-     feature, but would require a fair amount of code. It would be
-     easier if there was some basic support for doing this with minimal
-     effort.
+   * {node, foo@bar.baz, Instantiator}
+   * {node, foo, Instantiator}
 
  - Whole-application testing (using .app files?)
 

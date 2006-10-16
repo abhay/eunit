@@ -73,6 +73,8 @@
 %%          | {foreachx, Setup, Cleanup, Pairs}
 %%          | {foreachx, Process, Setup, Pairs}
 %%          | {foreachx, Setup, Pairs}
+%%          | {node, Node::atom(), tests() | Instantiator}
+%%          | {node, Node, Args::string(), tests() | Instantiator}
 %%
 %% SimpleTest = TestFunction | {Line::integer(), TestFunction}
 %%
@@ -285,6 +287,22 @@ parse({setup, P, S, C, I} = T)
     end;
 parse({setup, P, S, C, T}) when is_function(S), is_function(C) ->
     parse({setup, P, S, C, fun (_) -> T end});
+parse({node, N, T}) when is_atom(N) ->
+    parse({node, N, "", T});
+parse({node, N, A, T1}=T) when is_atom(N) ->
+    case eunit_lib:is_string(A) of
+	true ->
+	    parse({setup,
+		   fun () ->
+			   {Name, Host} = eunit_lib:split_node(N),
+			   {ok, Node} = slave:start_link(Host, Name, A),
+			   Node
+		   end,
+		   fun (Node) -> slave:stop(Node) end,
+		   T1});
+	false ->
+	    bad_test(T)
+    end;
 parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->

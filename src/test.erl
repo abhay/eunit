@@ -307,3 +307,12 @@ foreach_timeout_test_() ->
       ?_test(succeed())
      ]
     }.
+
+slave_test_() ->
+    {node, foo,
+     fun (Node) ->
+	     [?_assertMatch(pong, net_adm:ping(Node)),
+	      ?_assertMatch("olleh",
+			    rpc:call(Node, lists, reverse, ["hello"]))]
+     end
+    }.

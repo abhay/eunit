@@ -30,9 +30,9 @@
 -include("eunit_internal.hrl").
 
 
--export([dlist_next/1, uniq/1, fun_parent/1, is_string/1,
-	 browse_fun/1, command/1, command/2, command/3,
-	 trie_new/0, trie_store/2, trie_match/2]).
+-export([dlist_next/1, uniq/1, fun_parent/1, is_string/1, browse_fun/1,
+	 command/1, command/2, command/3, trie_new/0, trie_store/2,
+	 trie_match/2, split_node/1]).
 
 
 %% Type definitions for describing exceptions
@@ -147,6 +147,20 @@ is_string_test_() ->
      ]}.
 -endif.
 
+
+%% ---------------------------------------------------------------------
+%% Splitting a full node name into basename and hostname,
+%% using 'localhost' as the default hostname
+
+split_node(N) when is_atom(N) -> split_node(atom_to_list(N));
+split_node(Cs) -> split_node_1(Cs, []).
+
+split_node_1([$@ | Cs], As) -> split_node_2(As, Cs);
+split_node_1([C | Cs], As) -> split_node_1(Cs, [C | As]);
+split_node_1([], As) ->  split_node_2(As, "localhost").
+
+split_node_2(As, Cs) ->
+    {list_to_atom(lists:reverse(As)), list_to_atom(Cs)}.
 
 %% ---------------------------------------------------------------------
 %% Get the name of the containing function for a fun. (This is encoded
