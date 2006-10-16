@@ -21,6 +21,8 @@
 %% @see eunit
 %% @doc Text-based frontend for EUnit
 
+%% TODO: setup failure does not show message unless a group title is set
+
 -module(eunit_tty).
 
 -include("eunit.hrl").
