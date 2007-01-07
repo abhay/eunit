@@ -118,24 +118,30 @@ test(T, Options) ->
     test(?SERVER, T, Options).
 
 test(Server, T, Options) ->
-    List = eunit_data:list(T),
-    Front = eunit_tty:start(List, Options),
-    Serial = eunit_serial:start(List, [Front]),
-    case eunit_server:start_test(Server, Serial, T, Options) of
-	{ok, Reference} ->
-	    receive
-		{start, Reference} ->
-		    Front ! {start, Reference}
-	    end,
-	    receive
-		{done, Reference} ->
-		    Front ! {stop, Reference, self()},
-		    receive 
-			{result, Reference, Result} ->
-			    Result
-		    end
-	    end;
+    try eunit_data:list(T) of
+	List ->
+	    Front = eunit_tty:start(List, Options),
+	    Serial = eunit_serial:start(List, [Front]),
+	    case eunit_server:start_test(Server, Serial, T, Options) of
+		{ok, Reference} -> test_run(Reference, Front);
+		{error, R} -> {error, R}
+	    end
+    catch
 	{error, R} -> {error, R}
+    end.
+
+test_run(Reference, Front) ->
+    receive
+	{start, Reference} ->
+	    Front ! {start, Reference}
+    end,
+    receive
+	{done, Reference} ->
+	    Front ! {stop, Reference, self()},
+	    receive 
+		{result, Reference, Result} ->
+		    Result
+	    end
     end.
 
 %% TODO: functions that run tests on a given node, not a given server

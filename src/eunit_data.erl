@@ -36,6 +36,9 @@
 %%            SimpleTest
 %%          | [tests()]
 %%          | moduleName()
+%%          | {module, moduleName()}
+%%          | fileName()
+%%          | {file, fileName()}
 %%          | {string(), tests()}
 %%          | {string(), term(), term()}
 %%          | {string(), term(), term(), term()}
@@ -86,8 +89,9 @@
 %% Note that `{string(), ...}' is equivalent to `{string(), {...}}' if
 %% the tuple contains more than two elements.
 %%
-%% @type moduleName() = eunit_lib:moduleName()
-%% @type functionName() = eunit_lib:functionName()
+%% @type moduleName() = atom()
+%% @type functionName() = atom()
+%% @type fileName() = string()
 
 %% ---------------------------------------------------------------------
 %% Abstract test set iterator
@@ -114,6 +118,8 @@ iter_id(#iter{pos = N, parent = Ns}) ->
 %%       | {generator_failed, exception()}
 %%       | {no_such_function, eunit_lib:mfa()}
 %%       | {module_not_found, moduleName()}
+%%       | {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
 
 %% @spec (testIterator(), Handler) -> none | {testItem(), testIterator()}
 %%    Handler = (term()) -> term()
@@ -126,11 +132,13 @@ iter_do(F, I, H) ->
     catch
 	R = {bad_test, _Bad} ->
 	    H(R);
+	R = {generator_failed, _Exception} ->
+	    H(R);
 	R = {no_such_function, _MFA} ->
 	    H(R);
 	R = {module_not_found, _M} ->
 	    H(R);
-	R = {generator_failed, _Exception} ->
+	R = {file_read_error, _Info} ->
 	    H(R)
     end.
 
@@ -303,6 +311,15 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
 	false ->
 	    bad_test(T)
     end;
+parse({module, M}) when is_atom(M) ->
+    parse(M);
+parse({file, F} = T) when is_list(F) ->
+    case eunit_lib:is_string(F) of
+	true ->
+	    get_file_tests(F);
+	false ->
+	    bad_test(T)
+    end;
 parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->
@@ -316,7 +333,12 @@ parse(T) when is_tuple(T), size(T) > 2, is_list(element(1, T)) ->
 parse(M) when is_atom(M) ->
     get_module_tests(M);
 parse(T) when is_list(T) ->
-    T;
+    case eunit_lib:is_string(T) of
+	true ->
+	    parse({file, T});
+	false ->
+	    T
+    end;
 parse(T) ->
     parse_simple(T).
 
@@ -432,6 +454,16 @@ get_module_tests(M) ->
     end.
 
 %% ---------------------------------------------------------------------
+%% Reading tests from a file
+
+%% @throws {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
+
+get_file_tests(F) ->
+    eunit_lib:consult_file(F).
+
+
+%% ---------------------------------------------------------------------
 %% Entering a setup-context, with guaranteed cleanup.
 
 %% @spec (Tests::#context{}, Instantiate, Callback) -> any()
@@ -470,7 +502,7 @@ list(T, ParentID) ->
     list_loop(iter_init(T, ParentID)).
 
 list_loop(I) ->
-    case iter_next(I, fun (R) -> throw(R) end) of
+    case iter_next(I, fun (R) -> throw({error, R}) end) of
  	{T, I1} ->
 	    Id = iter_id(I1),
  	    case T of

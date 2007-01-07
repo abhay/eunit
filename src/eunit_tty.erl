@@ -289,7 +289,9 @@ aborted(Reason) ->
  	{module_not_found, M} ->
  	    cancel_msg("test module not found", "~p", [M]);
  	{generator_failed, Exception} ->
- 	    cancel_msg("test generator failed", "~p", [Exception])
+ 	    cancel_msg("test generator failed", "~p", [Exception]);
+ 	{file_read_error, {_R, Msg, F}} ->
+ 	    cancel_msg("error reading file", "~s: ~s", [Msg, F])
     end.
 
 cancel_msg(Title, Str, Args) ->

@@ -112,10 +112,17 @@ Concepts and features
 
    * Deep lists represent generic test sets
 
- - Test suite (as in 'eunit:make_suite(M)', 'eunit:run_suite(S)'); label
-   of a test suite; composition of test suites
+ - Test suites: label of a test suite, composition of test suites
 
    * Deep lists and {"label", DeepList} work fine for this purpose
+
+ - Defining test suites without modifying code or creating new modules.
+
+   * This does not create new tests - just select specific modules or
+     functions. If there is need for expressiveness beyond a simple list
+     of constant terms (no funs), it should be put in a module. Hence, a
+     facility for "consulting" files should be sufficient.
+   * Works (simply writing "filename" or {file, "filename"}).
 
  - Extra header files for better macro namespace separation (eunit_...)
 

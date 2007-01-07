@@ -32,7 +32,7 @@
 
 -export([dlist_next/1, uniq/1, fun_parent/1, is_string/1, browse_fun/1,
 	 command/1, command/2, command/3, trie_new/0, trie_store/2,
-	 trie_match/2, split_node/1]).
+	 trie_match/2, split_node/1, consult_file/1]).
 
 
 %% Type definitions for describing exceptions
@@ -49,18 +49,28 @@
 %% @type arity() = integer()
 %% @type mfa() = {moduleName(), functionName(), arity()}
 %% @type argList() = [term()]
+%% @type fileName() = string()
 
 
 %% ---------------------------------------------------------------------
 %% Deep list iterator; accepts improper lists/sublists, and also accepts
-%% non-lists on the top level. The result is always presented as a list
-%% (which may be improper), which is either empty or otherwise has a
-%% non-list head element.
+%% non-lists on the top level. Nonempty strings (not deep strings) are
+%% recognized as separate elements, even on the top level. (It is not
+%% recommended to include integers in the deep list, since a list of
+%% integers is likely to be interpreted as a string.). The result is
+%% always presented as a list (which may be improper), which is either
+%% empty or otherwise has a non-list head element.
 
-dlist_next([X | Xs]) when is_list(X) ->
-    dlist_next(X, Xs);
+dlist_next([X | Xs] = Xs0) when is_list(X) ->
+    case is_nonempty_string(X) of
+	true -> Xs0;
+	false -> dlist_next(X, Xs)
+    end;
 dlist_next([_|_] = Xs) ->
-    Xs;
+    case is_nonempty_string(Xs) of
+	true -> [Xs];
+	false -> Xs
+    end;
 dlist_next([]) ->
     [];
 dlist_next(X) ->
@@ -68,11 +78,17 @@ dlist_next(X) ->
 
 %% the first two clauses avoid pushing empty lists on the stack
 dlist_next([X], Ys) when is_list(X) ->
-    dlist_next(X, Ys);
+    case is_nonempty_string(X) of
+	true -> [X | Ys];
+	false -> dlist_next(X, Ys)
+    end;
 dlist_next([X], Ys) ->
     [X | Ys];
 dlist_next([X | Xs], Ys) when is_list(X) ->
-    dlist_next(X, [Xs | Ys]);
+    case is_nonempty_string(X) of
+	true -> [X | [Xs | Ys]];
+	false -> dlist_next(X, [Xs | Ys])
+    end;
 dlist_next([X | Xs], Ys) ->
     [X | [Xs | Ys]];
 dlist_next([], Xs) ->
@@ -89,23 +105,33 @@ dlist_test_() ->
       {"singleton list -> singleton list",
        ?_test([any] = dlist_next([any]))},
       {"taking the head of a flat list",
-       ?_test([1,2,3] = dlist_next([1,2,3]))},
+       ?_test([a,b,c] = dlist_next([a,b,c]))},
       {"skipping an initial empty list",
-       ?_test([1,2,3] = dlist_next([[],1,2,3]))},
+       ?_test([a,b,c] = dlist_next([[],a,b,c]))},
       {"skipping nested initial empty lists",
-       ?_test([1,2,3] = dlist_next([[[[]]],1,2,3]))},
+       ?_test([a,b,c] = dlist_next([[[[]]],a,b,c]))},
       {"skipping a final empty list",
        ?_test([] = dlist_next([[]]))},
       {"skipping nested final empty lists",
        ?_test([] = dlist_next([[[[]]]]))},
       {"the first element is in a sublist",
-       ?_test([1,2,3] = dlist_next([[1],2,3]))},
+       ?_test([a,b,c] = dlist_next([[a],b,c]))},
+      {"recognizing a naked string",
+       ?_test(["abc"] = dlist_next("abc"))},
+      {"recognizing a wrapped string",
+       ?_test(["abc"] = dlist_next(["abc"]))},
+      {"recognizing a leading string",
+       ?_test(["abc",a,b,c] = dlist_next(["abc",a,b,c]))},
+      {"recognizing a nested string",
+       ?_test(["abc"] = dlist_next([["abc"]]))},
+      {"recognizing a leading string in a sublist",
+       ?_test(["abc",a,b,c] = dlist_next([["abc"],a,b,c]))},
       {"traversing an empty list",
        ?_test([] = dlist_flatten([]))},
       {"traversing a flat list",
-       ?_test([1,2,3] = dlist_flatten([1,2,3]))},
+       ?_test([a,b,c] = dlist_flatten([a,b,c]))},
       {"traversing a deep list",
-       ?_test([1,2,3] = dlist_flatten([[],[1,[2,[]],3],[]]))},
+       ?_test([a,b,c] = dlist_flatten([[],[a,[b,[]],c],[]]))},
       {"traversing a deep but empty list",
        ?_test([] = dlist_flatten([[],[[[]]],[]]))}
      ]}.
@@ -130,6 +156,9 @@ is_string([]) ->
     true;
 is_string(_) ->
     false.
+
+is_nonempty_string([]) -> false;
+is_nonempty_string(Cs) -> is_string(Cs).
 
 -ifdef(TEST).
 is_string_test_() ->
@@ -374,6 +403,21 @@ cmd_test_() ->
 
 -endif. % TEST
 
+
+%% ---------------------------------------------------------------------
+%% Wrapper around file:consult
+
+%% @throws {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
+
+consult_file(File) ->
+    case file:consult(File) of
+	{ok, Terms} ->
+	    Terms;
+	{error, Reason} ->
+	    Msg = file:format_error(Reason),
+	    throw({file_read_error, {Reason, Msg, File}})
+    end.
 
 %% ---------------------------------------------------------------------
 %% A trie for remembering and checking least specific cancelled events
