@@ -31,7 +31,7 @@ typically less verbose than its relatives.
 Although EUnit uses many preprocessor macros, they have been designed to
 be as nonintrusive as possible, and should not cause conflicts with
 existing code. Adding EUnit tests to a module should thus not normally
-require modifying code. Furthermore, tests that only excercise the
+require modifying code. Furthermore, tests that only exercise the
 exported functions of a module can always be placed in a completely
 separate module, avoiding any conflicts entirely.
 
