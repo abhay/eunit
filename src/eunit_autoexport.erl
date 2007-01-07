@@ -29,17 +29,22 @@
 
 
 parse_transform(Forms, Options) ->
-    TestSuffix = proplists:get_value(test_suffix, Options,
+    TestSuffix = proplists:get_value(eunit_test_suffix, Options,
 				     ?DEFAULT_TEST_SUFFIX),
-    GeneratorSuffix = proplists:get_value(generator_suffix, Options,
+    GeneratorSuffix = proplists:get_value(eunit_generator_suffix,
+					  Options,
 					  ?DEFAULT_GENERATOR_SUFFIX),
+    ExportSuffix = proplists:get_value(eunit_export_suffix, Options,
+				       ?DEFAULT_EXPORT_SUFFIX),
     F = fun (Form, Set) ->
-		form(Form, Set, TestSuffix, GeneratorSuffix)
+		form(Form, Set, TestSuffix, GeneratorSuffix,
+		     ExportSuffix)
 	end,
     Tests = sets:to_list(lists:foldl(F, sets:new(), Forms)),
     rewrite(Forms, Tests).
 
-form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix) ->
+form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix,
+     ExportSuffix) ->
     N = atom_to_list(Name),
     case lists:suffix(TestSuffix, N) of
 	true ->
@@ -49,7 +54,7 @@ form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix) ->
 		true ->
 		    sets:add_element({Name, 0}, Tests);
 		false ->
-		    case lists:suffix("_exported_", N) of
+		    case lists:suffix(ExportSuffix, N) of
 			true ->
 			    sets:add_element({Name, 0}, Tests);
 			false ->
@@ -57,7 +62,7 @@ form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix) ->
 		    end
 	    end
     end;
-form(_, Tests, _, _) ->
+form(_, Tests, _, _, _) ->
     Tests.
 
 rewrite([{attribute,_,module,Name}=M | Fs], Exports) ->

@@ -10,6 +10,7 @@
 -define(SERVER, eunit_server).
 -define(DEFAULT_TEST_SUFFIX, "_test").
 -define(DEFAULT_GENERATOR_SUFFIX, "_test_").
+-define(DEFAULT_EXPORT_SUFFIX, "_exported_").
 -define(DEFAULT_GROUP_TIMEOUT, infinity).
 -define(DEFAULT_TEST_TIMEOUT, 5000).
 -define(DEFAULT_SETUP_PROCESS, spawn).

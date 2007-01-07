@@ -39,17 +39,26 @@
 -ifndef(EUNIT).
 -define(EUNIT, true).
 -endif.
+-else.
+-undef(TEST).
+-undef(EUNIT).
 -endif.
 
-%% Parse transform for automatic exporting of test functions.
+%% Parse transforms for automatic exporting/stripping of test functions.
+%% (Note that although automatic stripping is convenient, it will make
+%% the code dependent on this header file and the eunit_striptests
+%% module for compilation, even when testing is switched off! Using
+%% -ifdef(EUNIT) around all test code makes the program more portable.)
 
--ifdef(EUNIT).
 -ifndef(EUNIT_NOAUTO).
+-ifndef(NOTEST).
 -compile({parse_transform, eunit_autoexport}).
+-else.
+-compile({parse_transform, eunit_striptests}).
 -endif.
 -endif.
 
-%% The macros should be available even if testing is turned off, and
+%% All macros should be available even if testing is turned off, and
 %% should preferably not require EUnit to be present at runtime.
 %% 
 %% We must use fun-call wrappers ((fun () -> ... end)()) to avoid
