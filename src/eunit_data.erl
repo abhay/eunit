@@ -52,7 +52,7 @@
 %%          | {inparallel, tests()}
 %%          | {inparallel, N::integer(), tests()}
 %%          | {setup, Process::local | spawn | {spawn, Node::atom()},
-%%                    Setup::() -> R::any(),
+%%                    Setup::() -> (R::any()),
 %%                    Cleanup::(R::any()) -> any(),
 %%                    tests() | Instantiator
 %%            }
@@ -60,7 +60,7 @@
 %%          | {setup, Process, Setup, tests() | Instantiator}
 %%          | {setup, Setup, tests() | Instantiator}
 %%          | {foreach, Process::local | spawn | {spawn, Node::atom()},
-%%                      Setup::() -> R::any(),
+%%                      Setup::() -> (R::any()),
 %%                      Cleanup::(R::any()) -> any(),
 %%                      [tests() | Instantiator]
 %%            }
@@ -68,7 +68,7 @@
 %%          | {foreach, Process, Setup, [tests() | Instantiator]}
 %%          | {foreach, Setup, [tests() | Instantiator]}
 %%          | {foreachx, Process::local | spawn | {spawn, Node::atom()},
-%%                       Setup::(X::any()) -> R::any(),
+%%                       Setup::(X::any()) -> (R::any()),
 %%                       Cleanup::(X::any(), R::any()) -> any(),
 %%                       Pairs::[{X::any(),
 %%                               (X::any(), R::any()) -> tests()}]
