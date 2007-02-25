@@ -51,6 +51,7 @@
 %%          | {inorder, tests()}
 %%          | {inparallel, tests()}
 %%          | {inparallel, N::integer(), tests()}
+%%          | {with, X::any(), [AbstractTestFunction]}
 %%          | {setup, Process::local | spawn | {spawn, Node::atom()},
 %%                    Setup::() -> (R::any()),
 %%                    Cleanup::(R::any()) -> any(),
@@ -71,7 +72,7 @@
 %%                       Setup::(X::any()) -> (R::any()),
 %%                       Cleanup::(X::any(), R::any()) -> any(),
 %%                       Pairs::[{X::any(),
-%%                               (X::any(), R::any()) -> tests()}]
+%%                                (X::any(), R::any()) -> tests()}]
 %%            }
 %%          | {foreachx, Setup, Cleanup, Pairs}
 %%          | {foreachx, Process, Setup, Pairs}
@@ -84,7 +85,10 @@
 %% TestFunction = () -> any()
 %%              | {M::moduleName(), F::functionName()}.
 %%
+%% AbstractTestFunction = (X::any()) -> () -> any()
+%%
 %% Instantiator = (R::any()) -> tests()
+%%              | {with, [AbstractTestFunction]}
 %%
 %% Note that `{string(), ...}' is equivalent to `{string(), {...}}' if
 %% the tuple contains more than two elements.
@@ -293,6 +297,8 @@ parse({setup, P, S, C, I} = T)
 			 context = #context{setup = S, cleanup = C,
 					    process = P}})
     end;
+parse({setup, P, S, C, {with, As}}) when is_list(As) ->
+    parse({setup, P, S, C, fun (X) -> {with, X, As} end});
 parse({setup, P, S, C, T}) when is_function(S), is_function(C) ->
     parse({setup, P, S, C, fun (_) -> T end});
 parse({node, N, T}) when is_atom(N) ->
@@ -320,6 +326,8 @@ parse({file, F} = T) when is_list(F) ->
 	false ->
 	    bad_test(T)
     end;
+parse({with, X, As}=T) when is_list(As) ->
+    parse([fun () -> A(X) end || A <- As, ok == check_arity(A, 1, T)]);
 parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->
@@ -356,13 +364,15 @@ parse_function({M,F}) when is_atom(M), is_atom(F) ->
 parse_function(F) ->
     bad_test(F).
 
-check_arity(F, N, T) ->
+check_arity(F, N, T) when is_function(F) ->
     case erlang:fun_info(F, arity) of
 	{arity, N} ->
 	    ok;
 	_ ->
 	    bad_test(T) 
-    end.
+    end;
+check_arity(_, _, T) ->
+    bad_test(T).
 
 bad_test(T) ->
     throw({bad_test, T}).
