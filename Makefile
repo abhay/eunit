@@ -23,3 +23,5 @@ docs:
 	erl -noshell -run edoc_run application \
 	    "'$(APPNAME)'" '"."' '$(DOC_OPTS)' -s init stop
 
+test: all
+	erl -noshell -pa ebin -s eunit test -s init stop

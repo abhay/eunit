@@ -409,21 +409,40 @@ command(Cmd, Dir, Env) ->
 get_data(P, D) ->
     receive
 	{P, {data, D1}} ->
-	    get_data(P, [D|D1]);
+	    get_data(P, [D1|D]);
 	{P, eof} ->
 	    port_close(P),    
 	    receive
 		{P, {exit_status, N}} ->
-		    {N, lists:flatten(lists:reverse(D))}
+		    {N, normalize(lists:flatten(lists:reverse(D)))}
 	    end
     end.
+
+normalize([$\r, $\n | Cs]) ->
+    [$\n | normalize(Cs)];
+normalize([$\r | Cs]) ->
+    [$\n | normalize(Cs)];
+normalize([C | Cs]) ->
+    [C | normalize(Cs)];
+normalize([]) ->
+    [].
 
 -ifdef(TEST).
 
 cmd_test_() ->
+    ([?_test({0, "hello\n"} = ?_cmd_("echo hello"))]
+     ++ case os:type() of
+	    {unix, _} ->
+		unix_cmd_tests();
+	    {win32, _} ->
+		win32_cmd_tests();
+	    _ ->
+		[]
+	end).
+
+unix_cmd_tests() ->
     [{"command execution, status, and output",
-      [?_test({0, "hello\n"} = ?_cmd_("echo hello")),
-       ?_cmd("echo hello"),
+      [?_cmd("echo hello"),
        ?_assertCmdStatus(0, "true"),
        ?_assertCmdStatus(1, "false"),
        ?_assertCmd("true"),
@@ -438,6 +457,13 @@ cmd_test_() ->
 	      [?_assertCmd("echo xyzzy >" ++ File),
 	       ?_assertCmdOutput("xyzzy\n", "cat " ++ File)]
       end}
+    ].
+
+win32_cmd_tests() ->
+    [{"command execution, status, and output",
+      [?_cmd("echo hello"),
+       ?_assertCmdOutput("hello\n", "echo hello")
+      ]}
     ].
 
 -endif. % TEST
