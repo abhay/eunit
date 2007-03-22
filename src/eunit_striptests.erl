@@ -28,8 +28,6 @@
 
 -export([parse_transform/2]).
 
-%% TODO: don't strip explicitly exported functions
-
 parse_transform(Forms, Options) ->
     TestSuffix = proplists:get_value(eunit_test_suffix, Options,
 				     ?DEFAULT_TEST_SUFFIX),
@@ -38,22 +36,30 @@ parse_transform(Forms, Options) ->
 					  ?DEFAULT_GENERATOR_SUFFIX),
     ExportSuffix = proplists:get_value(eunit_export_suffix, Options,
 				       ?DEFAULT_EXPORT_SUFFIX),
+    Exports = lists:foldl(fun ({attribute,_,export,Es}, S) ->
+				  sets:union(sets:from_list(Es), S);
+			      (_F, S) -> S
+			  end,
+			  sets:new(), Forms),
     F = fun (Form, Acc) ->
-		form(Form, Acc, TestSuffix, GeneratorSuffix,
+		form(Form, Acc, Exports, TestSuffix, GeneratorSuffix,
 		     ExportSuffix)
 	end,
     lists:reverse(lists:foldl(F, [], Forms)).
 
-form({function, _L, Name, 0, _Cs}=Form, Acc, TestSuffix,
+form({function, _L, Name, 0, _Cs}=Form, Acc, Exports, TestSuffix,
      GeneratorSuffix, ExportSuffix) ->
     N = atom_to_list(Name),
-    case lists:suffix(TestSuffix, N)
-	orelse lists:suffix(GeneratorSuffix, N) 
-	orelse lists:suffix(ExportSuffix, N) of
+    io:fwrite("function: ~w, exports: ~w", [{Name,0}, sets:to_list(Exports)]),
+    case not sets:is_element({Name, 0}, Exports)
+	andalso (lists:suffix(TestSuffix, N)
+		 orelse lists:suffix(GeneratorSuffix, N)
+		 orelse lists:suffix(ExportSuffix, N))
+	of
 	true ->
 	    Acc;
 	false ->
 	    [Form | Acc]
     end;
-form(Form, Acc, _, _, _) ->
+form(Form, Acc, _, _, _, _) ->
     [Form | Acc].
