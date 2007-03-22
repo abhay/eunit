@@ -20,7 +20,7 @@
 %%   [http://www.process-one.net/]
 %% @author Richard Carlsson <richardc@it.uu.se>
 %%   [http://user.it.uu.se/~richardc/]
-%% @version {@vsn}, {@date} {@time}
+%% @version {@version}, {@date} {@time}
 %% @doc This module is the normal EUnit user interface.
 
 -module(eunit).

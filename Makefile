@@ -4,9 +4,8 @@ APPNAME=eunit
 SUB_DIRECTORIES = src
 
 include vsn.mk
-VSN = $(EUNIT_VSN)
 
-DOC_OPTS=[{def,{vsn,"$(VSN)"}}]
+DOC_OPTS=[{def,{version,"$(EUNIT_VSN)"}}]
 
 
 all:

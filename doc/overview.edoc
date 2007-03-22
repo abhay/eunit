@@ -9,7 +9,7 @@
 @author Mickaël Rémond <mickael.remond@process-one.net> 
         [http://www.process-one.net/]
 @copyright 2004-2006 Mickaël Rémond, Richard Carlsson
-@version {@vsn}, {@date} {@time}
+@version {@version}, {@date} {@time}
 
 @doc EUnit is a unit testing framework for Erlang. It is very powerful
 and flexible, but is easy to use and has small syntactical overhead.

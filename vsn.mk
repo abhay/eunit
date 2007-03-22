@@ -1,1 +1,1 @@
-EUNIT_VSN = 2.0 alpha
+EUNIT_VSN = 2.0 beta 1
