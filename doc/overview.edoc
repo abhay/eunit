@@ -329,6 +329,16 @@ such macros in order to make it as easy as possible to write unit tests
 as compactly as possible and without getting too many details in the
 way.
 
+=== Basic macros ===
+
+<dl>
+<dt>`_test(Expr)'</dt>
+<dd>Turns `Expr' into a "test object", by wrapping it in a
+fun-expression and a source line number. Technically, this is the same
+as `{?LINE, fun () -> (Expr) end}'.
+</dd>
+</dl>
+
 === Compilation control macros ===
 
 <dl>
@@ -374,13 +384,37 @@ disabled.
 
 === Utility macros ===
 
+The following macros can make tests more compact and readable:
+
+<dl>
+<dt>`LET(Var,Arg,Expr)'</dt>
+<dd>Creates a local binding `Var = Arg' in `Expr'. (This is the same as
+`(fun(Var)->(Expr)end)(Arg)'.) Note that the binding is not exported
+outside of `Expr', and that within `Expr', this binding of `Var' will
+shadow any binding of `Var' in the surrounding scope.
+</dd>
+<dt>`IF(Cond,TrueCase,FalseCase)'</dt>
+<dd>Evaluates `TrueCase' if `Cond' evaluates to `true', or otherwise
+evaluates `FalseCase' if `Cond' evaluates to `false'. (This is the same
+as `(case (Cond) of true->(TrueCase); false->(FalseCase) end)'.) Note
+that it is an error if `Cond' does not yield a boolean value.
+</dd>
+</dl>
+
+=== Assert macros ===
+
+(Note that these macros also have corresponding forms which start with
+an "`_'" (underscore) character, as in `?_assert(BoolExpr)', that create
+a "test object" instead of performing the test immediately. This is
+equivalent to writing `?_test(assert(BoolExpr))', etc.)
+
 <dl>
 <dt>`assert(BoolExpr)'</dt>
 <dd>Evaluates the expression `BoolExpr', if testing is enabled. Unless
 the result is `true', an informative exception will be generated. If
-evaluation completes normally, the result of the macro expression is the
-atom `ok', regardless of the value of `BoolExpr'. If testing is
-disabled, the macro will not generate any code except the atom `ok', and
+there is no exception, the result of the macro expression is the atom
+`ok', and the value of `BoolExpr' is discarded. If testing is disabled,
+the macro will not generate any code except the atom `ok', and
 `BoolExpr' will not be evaluated.
 
 Typical usage:
@@ -391,6 +425,9 @@ tests, to check pre/postconditions and invariants. For example:
 ```some_recursive_function(X, Y, Z) ->
        ?assert(X + Y > Z),
        ...'''
+</dd>
+<dt>`assertNot(BoolExpr)'</dt>
+<dd>Equivalent to `assert(not (BoolExpr))'.
 </dd>
 <dt>`assertMatch(GuardedPattern, Expr)'</dt>
 <dd>Evaluates `Expr' and matches the result against `GuardedPattern', if
