@@ -168,7 +168,7 @@ This will have the following effect:
   can be used to run all the unit tests defined in the module</li>
   <li>Causes all functions whose names match `..._test()' or `..._test_()'
   to be automatically exported from the module (unless testing is
-  turned off)</li>
+  turned off, or the `EUNIT_NOAUTO' macro is defined)</li>
   <li>Makes all the preprocessor macros of EUnit available, to help
   writing tests</li>
 </ul>
@@ -292,6 +292,9 @@ or by adding a macro definition to the code, <em>before any EUnit header
 file is included</em>:
 ```-define(NOTEST, 1).'''
 (the value is not important, but should typically be 1 or `true').
+Note that unless the `EUNIT_NOAUTO' macro is defined, disabling testing
+will also automatically strip all test functions from the code, except
+for any that are explicitly declared as exported.
 
 For instance, to use EUnit in your application, but with testing turned
 off by default, put the following lines in a header file:
@@ -392,6 +395,11 @@ typically used to disable testing: If `NOTEST' is defined
 <em>before</em> any of the EUnit header files are included, and `TEST'
 is <em>not</em> defined, then the code will be compiled with EUnit
 disabled. See also {@section Disabling testing}.
+</dd>
+
+<dt>`EUNIT_NOAUTO'</dt>
+<dd>If this macro is defined, the automatic exporting or stripping of
+test functions will be disabled.
 </dd>
 </dl>
 
