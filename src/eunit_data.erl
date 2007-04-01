@@ -40,8 +40,6 @@
 %%          | fileName()
 %%          | {file, fileName()}
 %%          | {string(), tests()}
-%%          | {string(), term(), term()}
-%%          | {string(), term(), term(), term()}
 %%          | {generator, () -> tests()}
 %%          | {generator, M::moduleName(), F::functionName()}
 %%          | {cmd, C}
@@ -80,7 +78,7 @@
 %%          | {node, Node::atom(), tests() | Instantiator}
 %%          | {node, Node, Args::string(), tests() | Instantiator}
 %%
-%% SimpleTest = TestFunction | {Line::integer(), TestFunction}
+%% SimpleTest = TestFunction | {Line::integer(), SimpleTest}
 %%
 %% TestFunction = () -> any()
 %%              | {M::moduleName(), F::functionName()}.
@@ -90,8 +88,8 @@
 %% Instantiator = (R::any()) -> tests()
 %%              | {with, [AbstractTestFunction]}
 %%
-%% Note that `{string(), ...}' is equivalent to `{string(), {...}}' if
-%% the tuple contains more than two elements.
+%% Note that `{string(), ...}' is a short-hand for `{string(), {...}}'
+%% if the tuple contains more than two elements.
 %%
 %% @type moduleName() = atom()
 %% @type functionName() = atom()
