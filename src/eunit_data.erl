@@ -50,31 +50,31 @@
 %%          | {inparallel, tests()}
 %%          | {inparallel, N::integer(), tests()}
 %%          | {with, X::any(), [AbstractTestFunction]}
-%%          | {setup, Process::local | spawn | {spawn, Node::atom()},
+%%          | {setup, Where::local | spawn | {spawn, Node::atom()},
 %%                    Setup::() -> (R::any()),
 %%                    Cleanup::(R::any()) -> any(),
 %%                    tests() | Instantiator
 %%            }
 %%          | {setup, Setup, Cleanup, tests() | Instantiator}
-%%          | {setup, Process, Setup, tests() | Instantiator}
+%%          | {setup, Where, Setup, tests() | Instantiator}
 %%          | {setup, Setup, tests() | Instantiator}
-%%          | {foreach, Process::local | spawn | {spawn, Node::atom()},
+%%          | {foreach, Where::local | spawn | {spawn, Node::atom()},
 %%                      Setup::() -> (R::any()),
 %%                      Cleanup::(R::any()) -> any(),
 %%                      [tests() | Instantiator]
 %%            }
 %%          | {foreach, Setup, Cleanup, [tests() | Instantiator]}
-%%          | {foreach, Process, Setup, [tests() | Instantiator]}
+%%          | {foreach, Where, Setup, [tests() | Instantiator]}
 %%          | {foreach, Setup, [tests() | Instantiator]}
-%%          | {foreachx, Process::local | spawn | {spawn, Node::atom()},
-%%                       Setup::(X::any()) -> (R::any()),
-%%                       Cleanup::(X::any(), R::any()) -> any(),
+%%          | {foreachx, Where::local | spawn | {spawn, Node::atom()},
+%%                       SetupX::(X::any()) -> (R::any()),
+%%                       CleanupX::(X::any(), R::any()) -> any(),
 %%                       Pairs::[{X::any(),
 %%                                (X::any(), R::any()) -> tests()}]
 %%            }
-%%          | {foreachx, Setup, Cleanup, Pairs}
-%%          | {foreachx, Process, Setup, Pairs}
-%%          | {foreachx, Setup, Pairs}
+%%          | {foreachx, SetupX, CleanupX, Pairs}
+%%          | {foreachx, Where, SetupX, Pairs}
+%%          | {foreachx, SetupX, Pairs}
 %%          | {node, Node::atom(), tests() | Instantiator}
 %%          | {node, Node, Args::string(), tests() | Instantiator}
 %%
@@ -83,7 +83,7 @@
 %% TestFunction = () -> any()
 %%              | {M::moduleName(), F::functionName()}.
 %%
-%% AbstractTestFunction = (X::any()) -> () -> any()
+%% AbstractTestFunction = (X::any()) -> any()
 %%
 %% Instantiator = (R::any()) -> tests()
 %%              | {with, [AbstractTestFunction]}
