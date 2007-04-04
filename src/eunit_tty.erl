@@ -192,11 +192,9 @@ group_end(Id, I, Desc, St) ->
 	 {{cancel, Reason}, St1} ->
 	     if Desc /= "", St1#state.verbose ->
 		     print_group_cancel(I, Reason);
-		Desc /= "" ->
-		     print_group_start(I, Desc),
-		     print_group_cancel(I, Reason);
 		true ->
-		     ok
+		     print_group_start(I, Desc),
+		     print_group_cancel(I, Reason)
 	     end,
 	     St1
      end)#state{indent = I}.
