@@ -187,14 +187,17 @@ next(Tests) ->
     case eunit_lib:dlist_next(Tests) of
 	[T | Ts] ->
 	    case parse(T) of
-		Ts1 when is_list(Ts1) ->
-		    next([Ts1 | Ts]);
+		{data, T1} ->
+		    next([T1 | Ts]);
 		T1 ->
 		    {T1, Ts}
 	    end;
 	[] ->
 	    none
     end.
+
+%% this returns either a #test{} or #group{} record, or {data, T} to
+%% signal that T has been substituted for the given representation
 
 parse({foreach, S, Fs}) when is_function(S), is_list(Fs) ->
     parse({foreach, S, fun ok/1, Fs});
@@ -210,9 +213,9 @@ parse({foreach, P, S, C, Fs} = T)
     check_arity(C, 1, T),
     case eunit_lib:dlist_next(Fs) of
 	[F | Fs1] ->
-	    [{setup, P, S, C, F}, {foreach, S, C, Fs1}];
+	    {data, [{setup, P, S, C, F}, {foreach, S, C, Fs1}]};
 	[] ->
-	    []
+	    {data, []}
     end;
 parse({foreachx, S1, Ps}) when is_function(S1), is_list(Ps) ->
     parse({foreachx, S1, fun ok/2, Ps});
@@ -232,7 +235,7 @@ parse({foreachx, P, S1, C1, Ps} = T)
 	    S = fun () -> S1(X) end,
 	    C = fun (R) -> C1(X, R) end,
 	    F = fun (R) -> F1(X, R) end,
-	    [{setup, P, S, C, F}, {foreachx, S1, C1, Ps1}];
+	    {data, [{setup, P, S, C, F}, {foreachx, S1, C1, Ps1}]};
 	[_|_] ->
 	    bad_test(T);
 	[] ->
@@ -243,7 +246,7 @@ parse({generator, F} = T) when is_function(F) ->
     %% use run_testfun/1 to handle wrapper exceptions
     case eunit_test:run_testfun(F) of
 	{ok, T1} ->
-	    parse(T1);
+	    {data, T1};
 	{error, {Class, Reason, Trace}} ->
 	    throw({generator_failed, {Class, Reason, Trace}})
     end;
@@ -252,6 +255,7 @@ parse({generator, M, F}) when is_atom(M), is_atom(F) ->
 parse({cmd, C} = T) ->
     case eunit_lib:is_string(C) of
 	true ->
+	    %% TODO: better identification for this kind of internal funs
 	    parse(fun () -> ?cmd(C) end);
 	false ->
 	    bad_test(T)
@@ -304,6 +308,7 @@ parse({node, N, T}) when is_atom(N) ->
 parse({node, N, A, T1}=T) when is_atom(N) ->
     case eunit_lib:is_string(A) of
 	true ->
+	    %% TODO: better stack traces for internal funs like these
 	    parse({setup,
 		   fun () ->
 			   {Name, Host} = eunit_lib:split_node(N),
@@ -316,16 +321,22 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
 	    bad_test(T)
     end;
 parse({module, M}) when is_atom(M) ->
-    parse(M);
+    {data, {"module '" ++ atom_to_list(M) ++ "'", get_module_tests(M)}};
 parse({file, F} = T) when is_list(F) ->
     case eunit_lib:is_string(F) of
 	true ->
-	    get_file_tests(F);
+	    {data, {"file \"" ++ F ++ "\"", get_file_tests(F)}};
 	false ->
 	    bad_test(T)
     end;
 parse({with, X, As}=T) when is_list(As) ->
-    parse([fun () -> A(X) end || A <- As, ok == check_arity(A, 1, T)]);
+    case eunit_lib:dlist_next(As) of
+	[A | As1] ->
+	    check_arity(A, 1, T),
+	    {data, [fun () -> A(X) end, {with, X, As1}]};
+	[] ->
+	    {data, []}
+    end;
 parse({S, T1} = T) when is_list(S) ->
     case eunit_lib:is_string(S) of
 	true ->
@@ -337,16 +348,18 @@ parse(T) when is_tuple(T), size(T) > 2, is_list(element(1, T)) ->
     [S | Es] = tuple_to_list(T),
     parse({S, list_to_tuple(Es)});
 parse(M) when is_atom(M) ->
-    get_module_tests(M);
+    parse({module, M});
 parse(T) when is_list(T) ->
     case eunit_lib:is_string(T) of
 	true ->
 	    parse({file, T});
 	false ->
-	    T
+	    bad_test(T)
     end;
 parse(T) ->
     parse_simple(T).
+
+%% parse_simple always produces a #test{} record
 
 parse_simple({L, F}) when is_integer(L), L >= 0 ->
     (parse_simple(F))#test{line = L};
@@ -554,3 +567,47 @@ list_size({item, _, _, _}) -> 1;
 list_size({group, _, _, Es}) -> list_size(Es);    
 list_size(Es) when is_list(Es) ->
     lists:foldl(fun (E, N) -> N + list_size(E) end, 0, Es).
+
+-ifdef(TEST).
+
+generator_exported_() ->
+    generator().
+
+generator() ->
+    T = ?_test(ok),
+    [T, T, T].
+
+echo_proc() ->
+    receive {P,X} -> P ! X, echo_proc() end.
+
+ping(P) ->
+    P ! {self(),ping}, receive ping -> ok end.    
+
+%%-define(BIND(V, E), (fun (V) -> (E) end)).
+
+data_test_() ->
+    Setup = fun () -> spawn(fun echo_proc/0) end,
+    Cleanup = fun (Pid) -> exit(Pid, kill) end,
+    Fail = ?_test(throw(eunit)),
+    T = ?_test(ok),
+    Tests = [T,T,T],
+    [?_assertMatch(ok, eunit:test(T)),
+     ?_assertMatch(error, eunit:test(Fail)),
+     ?_assertMatch(ok, eunit:test({generator, fun () -> Tests end})),
+     ?_assertMatch(ok, eunit:test({generator, fun generator/0})),
+     ?_assertMatch(ok, eunit:test({generator, ?MODULE, generator_exported_})),
+     ?_assertMatch(ok, eunit:test({cmd, "echo hello"})),
+     ?_assertMatch(ok, eunit:test({inorder, Tests})),
+     ?_assertMatch(ok, eunit:test({inparallel, Tests})),
+     ?_assertMatch(ok, eunit:test({timeout, 10, Tests})),
+     ?_assertMatch(ok, eunit:test({spawn, Tests})),
+     ?_assertMatch(ok, eunit:test({setup, Setup, Cleanup,
+				   fun (P) -> ?_test(ok = ping(P)) end})),
+     ?_assertMatch(ok, eunit:test({node, test@localhost, Tests})),
+     ?_assertMatch(ok, eunit:test({module, eunit_lib})),
+     ?_assertMatch(ok, eunit:test(eunit_lib)),
+     ?_assertMatch(ok, eunit:test("examples/tests.txt"))
+
+     %%?_test({foreach, Setup, [T, T, T]})
+    ].
+-endif.
