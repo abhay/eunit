@@ -1,9 +1,3 @@
-Launch example unit test with:
+EUnit 2.0 Beta release
 
-erl -config sys.config
-
-and then
-
-eunit:run([eunit_examples], {suffix, "_test"}).
-
-This version is compliant with Aegis configuration management system.
+See the doc/ subdirectory for documentation in HTML.
