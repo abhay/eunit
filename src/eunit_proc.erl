@@ -35,6 +35,9 @@
 %% Spawns test process and returns the process Pid; sends {done,
 %% Reference, Pid} to caller when finished. See the function
 %% wait_for_task/2 for details about the need for the reference.
+%%
+%% The `Super' process receives a stream of status messages; see
+%% status_message/3 for details.
 
 start(Tests, Order, Super, Reference)
   when is_pid(Super), is_reference(Reference) ->
@@ -43,6 +46,35 @@ start(Tests, Order, Super, Reference)
 		    super = Super,
 		    order = Order},
     spawn_group(local, #group{tests = Tests}, St).
+
+
+%% Status messages sent to the supervisor process. (A supervisor does
+%% not have to act on these messages - it can e.g. just log them, or
+%% even discard them.) Each status message has the following form:
+%%
+%%   {status, Id, Info}
+%%
+%% where Id identifies the item that the message pertains to, and the
+%% Info part can be one of:
+%%
+%%   {progress, 'begin', test | group}
+%%       indicates that the item has been entered, and what type it is
+%%
+%%   {progress, 'end', {Status, Time, StdOutput}}
+%%       Status is 'ok' or {error, Exception}
+%%       Time is an integer, in milliseconds
+%%       StdOutput is an IO-list
+%%
+%%   {cancel, Reason}
+%%       where Reason can be:
+%%           timeout            a timeout occurred
+%%           {exit, Reason}     the test process terminated unexpectedly
+%%           {abort, Reason}    the test failed to execute
+%%           {startup, Reason}  failed to start a remote test process
+%%           {blame, Id}        had to terminate because of item `Id'
+
+status_message(Id, Info, St) ->
+    St#procstate.super ! {status, Id, Info}.
 
 
 %% @TODO implement synchronized mode for insulator/child execution
@@ -225,13 +257,6 @@ cancel_message(Msg, St) ->
 progress_message(Type, Data, St) ->
     St#procstate.insulator ! {progress, self(), St#procstate.id,
 			      Type, Data}.
-
-%% Status messages from the insulator to the supervisor. (A supervisor
-%% does not have to act on these messages - it can e.g. just log them,
-%% or even discard them.)
-
-status_message(Id, Msg, St) ->
-    St#procstate.super ! {status, Id, Msg}.
 
 %% send cancel messages for the Id of the "causing" item, and also for
 %% the Id of the insulator itself, if they are different
