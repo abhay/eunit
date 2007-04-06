@@ -24,6 +24,9 @@
 
 -module(eunit_serial).
 
+-include("eunit.hrl").
+-include("eunit_internal.hrl").
+
 -export([start/2]).
 
 %% Notes:
@@ -52,35 +55,42 @@
 start(List, Pids) ->
     spawn(fun () -> serializer(List, Pids) end).
 
+%% TODO: try to eliminate the List parameter completely
+
 serializer(List, Pids) ->
     St = #state{listeners = sets:from_list(Pids),
 		cancelled = eunit_lib:trie_new(),
 		messages = dict:new()},
-    entry(group, [], List, St),
+    entry([], [], List, St),
     exit(normal).
 
-entry(Type, Id, Body, St) ->
+entry(Id, CalcId, Body, St) ->
+    ?assert(CalcId == Id),
     case wait(Id, 'begin', St) of
 	{{cancel, undefined}, St1} ->
 	    cast({status, Id, {cancel, undefined}}, St1);
 	{{cancel, Msg}, St1} ->
 	    cast(Msg, St1);
-	{{ok, Msg}, St1} ->
+	{{ok, Info, Msg}, St1} ->
 	    cast(Msg, St1),
-	    St2 = if Type == group -> tests(Body, St1);
-		     true -> St1
+	    St2 = case Info of
+		      {progress, 'begin', group} ->
+			  tests(Body, 1, CalcId, St1);
+		      _ -> St1
 		  end,
 	    case wait(Id, 'end', St2) of
 		{{cancel, undefined}, St3} ->
 		    cast({status, Id, {cancel, undefined}}, St3);
-		{{_, Msg1}, St3} ->
+		{{cancel, Msg1}, St3} ->
+		    cast(Msg1, St3);
+		{{ok, _, Msg1}, St3} ->
 		    cast(Msg1, St3)
 	    end
     end.
 
-tests([{Type, Id, _Desc, Body} | Es], St) ->
-    tests(Es, entry(Type, Id, Body, St));
-tests([], St) ->
+tests([{_Type, Id, _Desc, Body} | Es], N, ParentId, St) ->
+    tests(Es, N+1, ParentId, entry(Id, ParentId ++ [N], Body, St));
+tests([], _, _, St) ->
     St.
 
 cast(M, St) ->
@@ -93,8 +103,8 @@ wait(Id, Type, St) ->
 	    receive
 		{status, SomeId, {cancel, _Cause}} = Msg ->
 		    wait(Id, Type, set_cancelled(SomeId, Msg, St));
-		{status, Id, {progress, Type, _Data}} = Msg ->
-		    {{ok, Msg}, St}
+		{status, Id, {progress, Type, _Data}=Info} = Msg ->
+		    {{ok, Info, Msg}, St}
 	    end;
 	{yes, Msg} ->
 	    {{cancel, Msg}, forget(Id, St)}
