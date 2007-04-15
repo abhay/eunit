@@ -498,7 +498,6 @@ trie_store([E | Es], T) ->
     case gb_trees:lookup(E, T) of
 	none ->
 	    if Es == [] ->
-		    %% overwrite any previous more specific pattern
 		    gb_trees:insert(E, [], T);
 	       true ->
 		    gb_trees:insert(E, trie_store(Es, gb_trees:empty()),
