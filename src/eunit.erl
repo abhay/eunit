@@ -121,7 +121,7 @@ test(Server, T, Options) ->
     try eunit_data:list(T) of
 	List ->
 	    Front = eunit_tty:start(List, Options),
-	    Serial = eunit_serial:start(List, [Front]),
+	    Serial = eunit_serial:start([Front]),
 	    case eunit_server:start_test(Server, Serial, T, Options) of
 		{ok, Reference} -> test_run(Reference, Front);
 		{error, R} -> {error, R}

@@ -180,7 +180,7 @@ group_begin(Id, Desc, Es, St0) ->
 
 group_end(Id, I, Desc, St) ->
     (case wait(Id, St) of
-	 {{progress, 'end', {ok, Time, _Output}}, St1} ->
+	 {{progress, 'end', {_Count, Time, _Output}}, St1} ->
 	     if Desc /= "", St#state.verbose ->
 		     print_group_end(St1#state.indent, Time);
 		true ->

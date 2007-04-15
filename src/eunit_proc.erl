@@ -72,6 +72,9 @@ start(Tests, Order, Super, Reference)
 %%           {abort, Reason}    the test failed to execute
 %%           {startup, Reason}  failed to start a remote test process
 %%           {blame, Id}        had to terminate because of item `Id'
+%%
+%% Note that there are *no* strict ordering guarantees on the status
+%% messages, due to concurrent (and possibly distributed) execution!
 
 status_message(Id, Info, St) ->
     St#procstate.super ! {status, Id, Info}.
@@ -245,6 +248,30 @@ insulator_wait(Child, Parent, Buf, St) ->
 	    kill_task(Child, St)
     end.
 
+kill_task(Child, St) ->
+    exit(Child, kill),
+    terminate_insulator(St).
+
+%% Unlinking before exit avoids polluting the parent process with exit
+%% signals from the insulator. The child process is already dead here.
+
+terminate_insulator(St) ->
+    %% messaging/unlinking is ok even if the parent is already dead
+    Parent = St#procstate.parent,
+    Parent ! {done, St#procstate.ref, self()},
+    unlink(Parent),
+    exit(normal).
+
+%% send cancel messages for the Id of the "causing" item, and also for
+%% the Id of the insulator itself, if they are different
+exit_messages(Id, Cause, St) ->
+    %% the message for the most specific Id is always sent first
+    status_message(Id, {cancel, Cause}, St),
+    case St#procstate.id of
+	Id -> ok;
+	Id1 -> status_message(Id1, {cancel, {blame, Id}}, St)
+    end.
+
 %% Child processes send all messages via the insulator to ensure proper
 %% sequencing with timeouts and exit signals.
 
@@ -257,30 +284,6 @@ cancel_message(Msg, St) ->
 progress_message(Type, Data, St) ->
     St#procstate.insulator ! {progress, self(), St#procstate.id,
 			      Type, Data}.
-
-%% send cancel messages for the Id of the "causing" item, and also for
-%% the Id of the insulator itself, if they are different
-exit_messages(Id, Cause, St) ->
-    %% the message for the most specific Id is always sent first
-    status_message(Id, {cancel, Cause}, St),
-    case St#procstate.id of
-	Id -> ok;
-	Id1 -> status_message(Id1, {cancel, {blame, Id}}, St)
-    end.
-
-%% Unlinking before exit avoids polluting the parent process with exit
-%% signals from the insulator. The child process is already dead here.
-
-terminate_insulator(St) ->
-    %% messaging/unlinking is ok even if the parent is already dead
-    Parent = St#procstate.parent,
-    Parent ! {done, St#procstate.ref, self()},
-    unlink(Parent),
-    exit(normal).
-
-kill_task(Child, St) ->
-    exit(Child, kill),
-    terminate_insulator(St).
 
 %% Timeout handling
 
@@ -390,29 +393,32 @@ set_id(I, St) ->
     St#procstate{id = eunit_data:iter_id(I)}.
 
 tests_inorder(I, St) ->
+    tests_inorder(I, 0, St).
+
+tests_inorder(I, N, St) ->
     case get_next_item(I) of
 	{T, I1} ->
 	    handle_item(T, set_id(I1, St)),
-	    tests_inorder(I1, St);
+	    tests_inorder(I1, N+1, St);
 	none ->
-	    ok
+	    N
     end.
 
-tests_inparallel(I, N, St) ->
-    tests_inparallel(I, St, N, N, sets:new()).
+tests_inparallel(I, K0, St) ->
+    tests_inparallel(I, 0, St, K0, K0, sets:new()).
 
-tests_inparallel(I, St, N, N0, Children) when N =< 0, N0 > 0 ->
+tests_inparallel(I, N, St, K, K0, Children) when K =< 0, K0 > 0 ->
     wait_for_tasks(Children, St),
-    tests_inparallel(I, St, N0, N0, sets:new());
-tests_inparallel(I, St, N, N0, Children) ->
+    tests_inparallel(I, N, St, K0, K0, sets:new());
+tests_inparallel(I, N, St, K, K0, Children) ->
     case get_next_item(I) of
 	{T, I1} ->
 	    Child = spawn_item(T, set_id(I1, St)),
-	    tests_inparallel(I1, St, N - 1, N0,
+	    tests_inparallel(I1, N+1, St, K - 1, K0,
 			     sets:add_element(Child, Children));
 	none ->
 	    wait_for_tasks(Children, St),
-	    ok
+	    N
     end.
 
 spawn_item(T, St0) ->

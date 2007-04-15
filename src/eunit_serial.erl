@@ -27,9 +27,13 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
--export([start/2]).
+-export([start/1]).
 
 %% Notes:
+%% * Due to concurrency, there are no guarantees that we will receive
+%% all status messages for the items within a group before we receive
+%% the 'end' message of the group itself.
+%% 
 %% * A cancelling event may arrive at any time, and may concern items we
 %% are not yet expecting (if tests are executed in parallel), or may
 %% concern not only the current item but possibly a group ancestor of
@@ -52,62 +56,84 @@
 		cancelled = eunit_lib:trie_new(),
 		messages = dict:new()}).
 
-start(List, Pids) ->
-    spawn(fun () -> serializer(List, Pids) end).
+start(Pids) ->
+    spawn(fun () -> serializer(Pids) end).
 
-%% TODO: try to eliminate the List parameter completely
-
-serializer(List, Pids) ->
+serializer(Pids) ->
     St = #state{listeners = sets:from_list(Pids),
 		cancelled = eunit_lib:trie_new(),
 		messages = dict:new()},
-    entry([], [], List, St),
+    item([], none, none, St),
     exit(normal).
 
-entry(Id, CalcId, Body, St) ->
-    ?assert(CalcId == Id),
-    case wait(Id, 'begin', St) of
-	{{cancel, undefined}, St1} ->
-	    cast({status, Id, {cancel, undefined}}, St1);
-	{{cancel, Msg}, St1} ->
-	    cast(Msg, St1);
-	{{ok, Info, Msg}, St1} ->
+item(Id, ParentId, N0, St0) ->
+    case wait(Id, 'begin', ParentId, N0, St0) of
+	{none, St1} ->
+	    {true, St1};
+	{{cancel, Done, undefined}, St1} ->
+	    {Done, cast({status, Id, {cancel, undefined}}, St1)};
+	{{cancel, Done, Msg}, St1} ->
+	    {Done, cast(Msg, St1)};
+	{{ok, Msg}, St1} ->
+	    %%eunit:debug({got_begin, Id, Msg}),
 	    cast(Msg, St1),
-	    St2 = case Info of
-		      {progress, 'begin', group} ->
-			  tests(Body, 1, CalcId, St1);
+	    St2 = case Msg of
+		      {status, _, {progress, 'begin', group}} ->
+			  items(Id, 0, St1);
 		      _ -> St1
 		  end,
-	    case wait(Id, 'end', St2) of
-		{{cancel, undefined}, St3} ->
-		    cast({status, Id, {cancel, undefined}}, St3);
-		{{cancel, Msg1}, St3} ->
-		    cast(Msg1, St3);
-		{{ok, _, Msg1}, St3} ->
-		    cast(Msg1, St3)
+	    case wait(Id, 'end', ParentId, N0, St2) of
+		{{cancel, Done, undefined}, St3} ->
+		    {Done, cast({status, Id, {cancel, undefined}}, St3)};
+		{{cancel, Done, Msg1}, St3} ->
+		    {Done, cast(Msg1, St3)};
+		{{ok, Msg1}, St3} ->
+		    %%eunit:debug({got_end, Id, Msg1}),
+		    {false, cast(Msg1, St3)}
 	    end
     end.
 
-tests([{_Type, Id, _Desc, Body} | Es], N, ParentId, St) ->
-    tests(Es, N+1, ParentId, entry(Id, ParentId ++ [N], Body, St));
-tests([], _, _, St) ->
-    St.
+items(ParentId, N0, St) ->
+    N = N0 + 1,
+    case item(ParentId ++ [N], ParentId, N0, St) of
+	{false, St1} ->
+	    items(ParentId, N, St1);
+	{true, St1} ->
+	    St1
+    end.
 
 cast(M, St) ->
     sets:fold(fun (L, M) -> L ! M end, M, St#state.listeners),
     St.
 
-wait(Id, Type, St) ->
+wait(Id, Type, ParentId, N0, St) ->
+    %%eunit:debug({wait, Id, Type}),
     case check_cancelled(Id, St) of
 	no ->
-	    receive
-		{status, SomeId, {cancel, _Cause}} = Msg ->
-		    wait(Id, Type, set_cancelled(SomeId, Msg, St));
-		{status, Id, {progress, Type, _Data}=Info} = Msg ->
-		    {{ok, Info, Msg}, St}
+	    case recall(Id, St) of
+		undefined ->
+		    wait_1(Id, Type, ParentId, N0, St);
+		Msg ->
+		    {{ok, Msg}, forget(Id, St)}
 	    end;
-	{yes, Msg} ->
-	    {{cancel, Msg}, forget(Id, St)}
+	Why ->
+	    %%eunit:debug({cancelled, Why, Id, ParentId}),
+	    Done = (Why =:= prefix),
+	    {{cancel, Done, recall(Id, St)}, forget(Id, St)}
+    end.
+
+wait_1(Id, Type, ParentId, N0, St) ->
+    receive
+	{status, Id, {progress, Type, _}}=Msg ->
+	    %%eunit:debug({Type, ParentId, Id}),
+	    {{ok, Msg}, St};
+	{status,ParentId,{progress,'end',{N0,_,_}}}=Msg ->
+	    %%eunit:debug({end_group, ParentId, Id}),
+	    {none, remember(ParentId, Msg, St)};
+	{status, SomeId, {cancel, _Cause}}=Msg ->
+	    %%eunit:debug({got_cancel, SomeId, ParentId, Id}),
+	    St1 = set_cancelled(SomeId, Msg, St),
+	    wait(Id, Type, ParentId, N0, St1)
     end.
 
 set_cancelled(Id, Msg, St0) ->
@@ -115,15 +141,13 @@ set_cancelled(Id, Msg, St0) ->
     St#state{cancelled = eunit_lib:trie_store(Id, St0#state.cancelled)}.
 
 check_cancelled(Id, St) ->
-    case eunit_lib:trie_match(Id, St#state.cancelled) of
-	no -> no;
-	_ -> {yes, recall(Id, St)}
-    end.
+    eunit_lib:trie_match(Id, St#state.cancelled).
 
 remember(Id, Msg, St) ->
     St#state{messages = dict:store(Id, Msg, St#state.messages)}.
 
 forget(Id, St) ->
+    %% this is just to enable garbage collection of old messages
     St#state{messages = dict:store(Id, undefined, St#state.messages)}.
 
 recall(Id, St) ->
