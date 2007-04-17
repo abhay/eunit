@@ -311,11 +311,36 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
 	    %% TODO: better stack traces for internal funs like these
 	    parse({setup,
 		   fun () ->
+			   %% TODO: auto-start net_kernel if needed
+ 			   StartedNet = false,
+%% The following is commented out because of problems when running
+%% eunit as part of the init sequence (from the command line):
+%% 			   StartedNet =
+%% 			       case whereis(net_kernel) of
+%% 				   undefined ->
+%% 				       M = list_to_atom(atom_to_list(N)
+%% 							++ "_master"),
+%% 				       case net_kernel:start([M]) of
+%% 					   {ok, _} ->
+%% 					       true;
+%% 					   {error, E} ->
+%% 					       throw({net_kernel_start, E})
+%% 				       end;
+%% 				   _ -> false
+%% 			       end,
+%% 			   eunit:debug({started, StartedNet}),
 			   {Name, Host} = eunit_lib:split_node(N),
 			   {ok, Node} = slave:start_link(Host, Name, A),
-			   Node
+			   {Node, StartedNet}
 		   end,
-		   fun (Node) -> slave:stop(Node) end,
+		   fun ({Node, StopNet}) ->
+%% 			   eunit:debug({stop, StopNet}),
+			   slave:stop(Node),
+			   case StopNet of
+			       true -> net_kernel:stop();
+			       false -> ok
+			   end
+		   end,
 		   T1});
 	false ->
 	    bad_test(T)
