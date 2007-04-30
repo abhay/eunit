@@ -608,8 +608,6 @@ echo_proc() ->
 ping(P) ->
     P ! {self(),ping}, receive ping -> ok end.    
 
-%%-define(BIND(V, E), (fun (V) -> (E) end)).
-
 data_test_() ->
     Setup = fun () -> spawn(fun echo_proc/0) end,
     Cleanup = fun (Pid) -> exit(Pid, kill) end,
@@ -628,11 +626,27 @@ data_test_() ->
      ?_assertMatch(ok, eunit:test({spawn, Tests})),
      ?_assertMatch(ok, eunit:test({setup, Setup, Cleanup,
 				   fun (P) -> ?_test(ok = ping(P)) end})),
-     ?_assertMatch(ok, eunit:test({node, test@localhost, Tests})),
+     %%?_assertMatch(ok, eunit:test({node, test@localhost, Tests})),
      ?_assertMatch(ok, eunit:test({module, eunit_lib})),
      ?_assertMatch(ok, eunit:test(eunit_lib)),
      ?_assertMatch(ok, eunit:test("examples/tests.txt"))
 
      %%?_test({foreach, Setup, [T, T, T]})
     ].
+
+lazy_test_() ->
+    {spawn, [?_test(undefined = put(count, 0)),
+	     lazy_gen(100),
+	     ?_assertMatch(100, get(count))]}.
+
+lazy_gen(N) ->
+    {generator,
+     fun () ->
+	     if N > 0 ->
+		     [?_test(put(count,1+get(count)))
+		      | lazy_gen(N-1)];
+		true ->
+		     []
+	     end
+     end}.
 -endif.
