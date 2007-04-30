@@ -213,6 +213,12 @@
 					   {status,__N}]})
 	    end
 	  end)())).
+-endif.
+-define(assertCmd(Cmd), ?assertCmdStatus(0, Cmd)).
+
+-ifdef(NOTEST).
+-define(assertCmdOutput(T, Cmd),ok).
+-else.
 -define(assertCmdOutput(T, Cmd),
  	((fun () ->
 	    case ?_cmd_(Cmd) of
@@ -226,7 +232,6 @@
 	    end
 	  end)())).
 -endif.
--define(assertCmd(Cmd), ?assertCmdStatus(0, Cmd)).
 
 -define(_assertCmdStatus(N, Cmd), ?_test(?assertCmdStatus(N, Cmd))).
 -define(_assertCmd(Cmd), ?_test(?assertCmd(Cmd))).
