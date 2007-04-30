@@ -15,7 +15,7 @@
 %%
 %% $Id: eunit_lib.erl,v 1.1 2004/12/04 15:12:36 mremond Exp $
 %%
-%% @copyright 2004-2006 Mickaël Rémond, Richard Carlsson
+%% @copyright 2004-2007 Mickaël Rémond, Richard Carlsson
 %% @author Mickaël Rémond <mickael.remond@process-one.net>
 %%   [http://www.process-one.net/]
 %% @author Richard Carlsson <richardc@it.uu.se>
@@ -385,8 +385,6 @@ browse_fun_test_() ->
 
 %% ---------------------------------------------------------------------
 %% Replacement for os:cmd
-
-%% @TODO line break normalization (on by default, 'raw' flag to turn off?)
 
 command(Cmd) ->
     command(Cmd, "").

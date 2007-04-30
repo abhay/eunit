@@ -8,7 +8,7 @@
         [http://user.it.uu.se/~richardc/]
 @author Mickaël Rémond <mickael.remond@process-one.net> 
         [http://www.process-one.net/]
-@copyright 2004-2006 Mickaël Rémond, Richard Carlsson
+@copyright 2004-2007 Mickaël Rémond, Richard Carlsson
 @version {@version}, {@date} {@time}
 
 @doc EUnit is a unit testing framework for Erlang. It is very powerful
@@ -536,10 +536,12 @@ exception unless the returned status value is `N'.
 <dt>`assertCmdOutput(Text, CommandString)'</dt>
 <dd>Runs `CommandString' as an external command, if testing is enabled.
 Unless the output produced by the command exactly matches the specified
-string `Text', an informative exception will be generated. If there is
-no exception, the result of the macro expression is the atom `ok'. If
-testing is disabled, the macro will not generate any code except the
-atom `ok', and the command will not be executed.
+string `Text', an informative exception will be generated. (Note that
+the output is normalized to use a single LF character as line break on
+all platforms.) If there is no exception, the result of the macro
+expression is the atom `ok'. If testing is disabled, the macro will not
+generate any code except the atom `ok', and the command will not be
+executed.
 </dd>
 </dl>
 
