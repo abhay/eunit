@@ -311,6 +311,21 @@ option, like this:
 See {@section Compilation control macros} for details about these
 macros.
 
+
+=== Avoiding Compile-time dependencies on EUnit ===
+
+If you are distributing the source code for your application for other
+people to compile and run, you probably want to ensure that the code
+compiles even if EUnit is not available. Like the example in the
+previous section, you can put the following lines in a common header
+file:
+```-ifdef(TEST).
+   -include_lib("eunit/include/eunit.hrl").
+   -endif.'''
+and, of course, also make sure that you place all test code that uses
+EUnit macros within `-ifdef(TEST)' or `-ifdef(EUNIT)' sections.
+
+
 == An example ==
 
 Sometimes, an example says more than a thousand words. The following
@@ -349,6 +364,10 @@ such macros in order to make it as easy as possible to write unit tests
 as compactly as possible and without getting too many details in the
 way.
 
+Except where explicitly stated, using EUnit macros will never introduce
+run-time dependencies on the EUnit library code, regardless of whether
+your code is compiled with testing enabled or disabled.
+
 === Basic macros ===
 
 <dl>
@@ -370,8 +389,9 @@ conditional compilation, as in:
        % test code here
        ...
    -endif.'''
-e.g., in order to eliminate compiler warnings about unused functions
-when testing is turned off. See also the macros `TEST' and `NOTEST'.
+e.g., to ensure that the code can be compiled without including the
+EUnit header file, when testing is disabled. See also the macros `TEST'
+and `NOTEST'.
 </dd>
 <dt>`TEST'</dt>
 <dd>This macro is always defined (to `true', unless previously defined
@@ -483,10 +503,46 @@ using `assertException' with a `ClassPattern' of `error', `exit', or
 
 Examples:
 ```?assertError(badarith, X/0)'''
-```?assertExit(foo, exit(foo))'''
-```?assertException(throw, {foo, _}, throw({foo, 42}))'''
+```?assertExit(normal, exit(normal))'''
+```?assertException(throw, {not_found,_}, throw({not_found,42}))'''
 </dd>
 </dl>
+
+=== Macros for running external commands ===
+
+Keep in mind that external commands are highly dependent on the
+operating system. You can use the standard library function `os:type()'
+in test generator functions, to produce different sets of tests
+depending on the current operating system.
+
+Note: these macros introduce a run-time dependency on the EUnit library
+code, if compiled with testing enabled.
+
+<dl>
+<dt>`assertCmd(CommandString)'</dt>
+<dd>Runs `CommandString' as an external command, if testing is enabled.
+Unless the returned status value is 0, an informative exception will be
+generated. If there is no exception, the result of the macro expression
+is the atom `ok'. If testing is disabled, the macro will not generate
+any code except the atom `ok', and the command will not be executed.
+
+Typical usage:
+```?assertCmd("mkdir foo")'''
+</dd>
+<dt>`assertCmdStatus(N, CommandString)'</dt>
+<dd>Like the `assertCmd(CommandString)' macro, but generates an
+exception unless the returned status value is `N'.
+</dd>
+<dt>`assertCmdOutput(Text, CommandString)'</dt>
+<dd>Runs `CommandString' as an external command, if testing is enabled.
+Unless the output produced by the command exactly matches the specified
+string `Text', an informative exception will be generated. If there is
+no exception, the result of the macro expression is the atom `ok'. If
+testing is disabled, the macro will not generate any code except the
+atom `ok', and the command will not be executed.
+</dd>
+</dl>
+
 
 == EUnit Test Representation ==
 
@@ -634,7 +690,7 @@ state locally for a test set, and automatically tear it down again when
 the test set is finished, regardless of the outcome (success, failures,
 timeouts, etc.).
 
-To simplify the below, we first list some definitions:
+To make the descriptions simpler, we first list some definitions:
 <center>
 <table border="0" cellspacing="4">
 <tr>
@@ -657,6 +713,7 @@ To simplify the below, we first list some definitions:
 </tr>
 </table>
 </center>
+(these are explained in more detail further below.)
 
 The following representations specify fixture handling for test sets:
 <dl>
@@ -715,9 +772,15 @@ over a list of unary functions; see {@section Primitives}: `{with, X,
 A `Where' term controls how the specified tests are executed. The
 default is `spawn', which means that the current process handles the
 setup and teardown, while the tests are executed in a subprocess.
-`local' means that the current process will handle both setup/teardown
-and running the tests - the drawback is that if a test times out so that
-the process is killed, the cleanup will not be performed; hence, avoid
-this for persistent fixtures such as file operations. `{spawn, Node}' is
-like `spawn', but runs the subprocess on the specified node.
-
+`{spawn, Node}' is like `spawn', but runs the subprocess on the
+specified node. `local' means that the current process will handle both
+setup/teardown and running the tests - the drawback is that if a test
+times out so that the process is killed, the <em>cleanup will not be
+performed</em>; hence, avoid this for persistent fixtures such as file
+operations. In general, 'local' should only be used when:
+<ul>
+  <li>the setup/teardown needs to be executed by the process that will
+  run the tests;</li>
+  <li>no further teardown needs to be done if the process is killed
+  (i.e., no state outside the process was affected by the setup)</li>
+</ul>
