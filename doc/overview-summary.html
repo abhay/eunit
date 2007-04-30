@@ -9,8 +9,8 @@
 <div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
 <h1>EUnit - a Lightweight Unit Testing Framework for Erlang
 </h1>
-<p>Copyright © 2004-2006 Mickaël Rémond, Richard Carlsson</p>
-<p><b>Version:</b> 2.0 beta 1, Apr 4 2007 23:19:17
+<p>Copyright © 2004-2007 Mickaël Rémond, Richard Carlsson</p>
+<p><b>Version:</b> 2.0 beta 1, Apr 30 2007 15:04:38
 </p>
 <p><b>Authors:</b> Richard Carlsson (<a href="mailto:richardc@it.uu.se"><tt>richardc@it.uu.se</tt></a>) [<em>web site:</em> <tt><a href="http://user.it.uu.se/~richardc/" target="_top">http://user.it.uu.se/~richardc/</a></tt>], Mickaël Rémond (<a href="mailto:mickael.remond@process-one.net"><tt>mickael.remond@process-one.net</tt></a>) [<em>web site:</em> <tt><a href="http://www.process-one.net/" target="_top">http://www.process-one.net/</a></tt>].</p>
 <p>EUnit is a unit testing framework for Erlang. It is very powerful
@@ -310,6 +310,21 @@ option, like this:
 <p>See <a href="#Compilation_control_macros">Compilation control macros</a> for details about these
 macros.</p>
 
+
+<h4><a name="Avoiding_Compile-time_dependencies_on_EUnit">Avoiding Compile-time dependencies on EUnit</a></h4>
+
+If you are distributing the source code for your application for other
+people to compile and run, you probably want to ensure that the code
+compiles even if EUnit is not available. Like the example in the
+previous section, you can put the following lines in a common header
+file:
+<pre>   -ifdef(TEST).
+   -include_lib("eunit/include/eunit.hrl").
+   -endif.</pre><p>
+and, of course, also make sure that you place all test code that uses
+EUnit macros within <code>-ifdef(TEST)</code> or <code>-ifdef(EUNIT)</code> sections.</p>
+
+
 <h3><a name="An_example">An example</a></h3>
 
 Sometimes, an example says more than a thousand words. The following
@@ -348,6 +363,10 @@ such macros in order to make it as easy as possible to write unit tests
 as compactly as possible and without getting too many details in the
 way.</p>
 
+<p>Except where explicitly stated, using EUnit macros will never introduce
+run-time dependencies on the EUnit library code, regardless of whether
+your code is compiled with testing enabled or disabled.</p>
+
 <h4><a name="Basic_macros">Basic macros</a></h4>
 
 <dl>
@@ -369,8 +388,9 @@ conditional compilation, as in:
        % test code here
        ...
    -endif.</pre>
-e.g., in order to eliminate compiler warnings about unused functions
-when testing is turned off. See also the macros <code>TEST</code> and <code>NOTEST</code>.
+e.g., to ensure that the code can be compiled without including the
+EUnit header file, when testing is disabled. See also the macros <code>TEST</code>
+and <code>NOTEST</code>.
 </dd>
 <dt><code>TEST</code></dt>
 <dd><p>This macro is always defined (to <code>true</code>, unless previously defined
@@ -482,10 +502,48 @@ using <code>assertException</code> with a <code>ClassPattern</code> of <code>err
 
 Examples:
 <pre>   ?assertError(badarith, X/0)</pre>
-<pre>   ?assertExit(foo, exit(foo))</pre>
-<pre>   ?assertException(throw, {foo, _}, throw({foo, 42}))</pre>
+<pre>   ?assertExit(normal, exit(normal))</pre>
+<pre>   ?assertException(throw, {not_found,_}, throw({not_found,42}))</pre>
 </dd>
 </dl>
+
+<h4><a name="Macros_for_running_external_commands">Macros for running external commands</a></h4>
+
+<p>Keep in mind that external commands are highly dependent on the
+operating system. You can use the standard library function <code>os:type()</code>
+in test generator functions, to produce different sets of tests
+depending on the current operating system.</p>
+
+<p>Note: these macros introduce a run-time dependency on the EUnit library
+code, if compiled with testing enabled.</p>
+
+<dl>
+<dt><code>assertCmd(CommandString)</code></dt>
+<dd><p>Runs <code>CommandString</code> as an external command, if testing is enabled.
+Unless the returned status value is 0, an informative exception will be
+generated. If there is no exception, the result of the macro expression
+is the atom <code>ok</code>. If testing is disabled, the macro will not generate
+any code except the atom <code>ok</code>, and the command will not be executed.</p>
+
+Typical usage:
+<pre>   ?assertCmd("mkdir foo")</pre>
+</dd>
+<dt><code>assertCmdStatus(N, CommandString)</code></dt>
+<dd>Like the <code>assertCmd(CommandString)</code> macro, but generates an
+exception unless the returned status value is <code>N</code>.
+</dd>
+<dt><code>assertCmdOutput(Text, CommandString)</code></dt>
+<dd>Runs <code>CommandString</code> as an external command, if testing is enabled.
+Unless the output produced by the command exactly matches the specified
+string <code>Text</code>, an informative exception will be generated. (Note that
+the output is normalized to use a single LF character as line break on
+all platforms.) If there is no exception, the result of the macro
+expression is the atom <code>ok</code>. If testing is disabled, the macro will not
+generate any code except the atom <code>ok</code>, and the command will not be
+executed.
+</dd>
+</dl>
+
 
 <h3><a name="EUnit_Test_Representation">EUnit Test Representation</a></h3>
 
@@ -633,7 +691,7 @@ state locally for a test set, and automatically tear it down again when
 the test set is finished, regardless of the outcome (success, failures,
 timeouts, etc.).</p>
 
-<p>To simplify the below, we first list some definitions:
+<p>To make the descriptions simpler, we first list some definitions:
 <center>
 <table border="0" cellspacing="4">
 <tr>
@@ -655,7 +713,8 @@ timeouts, etc.).</p>
 <td><code>Where</code></td><td><code>local | spawn | {spawn, Node::atom()}</code></td>
 </tr>
 </table>
-</center></p>
+</center>
+(these are explained in more detail further below.)</p>
 
 The following representations specify fixture handling for test sets:
 <dl>
@@ -711,18 +770,24 @@ which represents an instantiator function that distributes the value
 over a list of unary functions; see <a href="#Primitives">Primitives</a>: <code>{with, X,
 [...]}</code> for more details.</p>
 
-<p>A <code>Where</code> term controls how the specified tests are executed. The
+A <code>Where</code> term controls how the specified tests are executed. The
 default is <code>spawn</code>, which means that the current process handles the
 setup and teardown, while the tests are executed in a subprocess.
-<code>local</code> means that the current process will handle both setup/teardown
-and running the tests - the drawback is that if a test times out so that
-the process is killed, the cleanup will not be performed; hence, avoid
-this for persistent fixtures such as file operations. <code>{spawn, Node}</code> is
-like <code>spawn</code>, but runs the subprocess on the specified node.</p>
-
+<code>{spawn, Node}</code> is like <code>spawn</code>, but runs the subprocess on the
+specified node. <code>local</code> means that the current process will handle both
+setup/teardown and running the tests - the drawback is that if a test
+times out so that the process is killed, the <em>cleanup will not be
+performed</em>; hence, avoid this for persistent fixtures such as file
+operations. In general, 'local' should only be used when:
+<ul>
+  <li>the setup/teardown needs to be executed by the process that will
+  run the tests;</li>
+  <li>no further teardown needs to be done if the process is killed
+  (i.e., no state outside the process was affected by the setup)</li>
+</ul>
 
 <hr>
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Apr 4 2007, 23:19:17.</i></p>
+<p><i>Generated by EDoc, Apr 30 2007, 15:04:38.</i></p>
 </body>
 </html>
