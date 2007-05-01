@@ -739,7 +739,7 @@ arguments to the new node; see `slave:start_link/3' for details.
 <dt>`{foreach, Where, Setup, [Tests | Instantiator]}'</dt>
 <dt>`{foreach, Setup, [Tests | Instantiator]}'</dt>
 <dd>`foreach' is used to set up a fixture and optionally tear it down
-afterwards, repeated for each single one of the specified tests.
+afterwards, repeated for each single one of the specified test sets.
 </dd>
 <dt>`{foreachx, Where, SetupX, CleanupX,
       Pairs::[{X::any(), ((X::any(), R::any()) -> Tests)}]}'</dt>

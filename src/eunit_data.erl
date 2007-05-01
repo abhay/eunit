@@ -211,7 +211,7 @@ parse({foreach, P, S, C, Fs} = T)
   when is_function(S), is_function(C), is_list(Fs) ->
     check_arity(S, 0, T),
     check_arity(C, 1, T),
-    case eunit_lib:dlist_next(Fs) of
+    case Fs of
 	[F | Fs1] ->
 	    {data, [{setup, P, S, C, F}, {foreach, S, C, Fs1}]};
 	[] ->
@@ -229,7 +229,7 @@ parse({foreachx, P, S1, C1, Ps} = T)
   when is_function(S1), is_function(C1), is_list(Ps) ->
     check_arity(S1, 1, T),
     check_arity(C1, 2, T),
-    case eunit_lib:dlist_next(Ps) of
+    case Ps of
 	[{X, F1} | Ps1] when is_function(F1) ->
 	    check_arity(F1, 2, T),
 	    S = fun () -> S1(X) end,
@@ -355,7 +355,7 @@ parse({file, F} = T) when is_list(F) ->
 	    bad_test(T)
     end;
 parse({with, X, As}=T) when is_list(As) ->
-    case eunit_lib:dlist_next(As) of
+    case As of
 	[A | As1] ->
 	    check_arity(A, 1, T),
 	    {data, [fun () -> A(X) end, {with, X, As1}]};
