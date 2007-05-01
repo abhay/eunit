@@ -239,7 +239,7 @@ parse({foreachx, P, S1, C1, Ps} = T)
 	[_|_] ->
 	    bad_test(T);
 	[] ->
-	    []
+	    {data, []}
     end;
 parse({generator, F} = T) when is_function(F) ->
     check_arity(F, 0, T),
