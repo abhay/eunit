@@ -1,4 +1,7 @@
 
+EUnit Developer notebook
+========================
+
 Concepts and features
 ---------------------
 
@@ -6,10 +9,11 @@ Concepts and features
 
    * Tests are represented by data structures
    * Traversal and execution are separated
+   * TODO: Cannot enumerate all tests in advance for really large sets
 
  - Test engine as a producer/iterator: run next, step back, repeat...
 
-   * Iterators working
+   * Iterators working (reverse/single stepping currently not used)
    * TODO: Need to be able to stop after N failures
 
  - Test module - a container (as in 'eunit:run(M)'); automatic test collection
@@ -133,7 +137,6 @@ Concepts and features
 
    * Works (also running N tests at a time)
    * TODO: Restructure to start new job as soon as slot is available
-   * TODO: Cannot enumerate all tests in advance for really large sets
 
  - Running a test or set of tests in a new process (like setup/teardown)
 
@@ -148,8 +151,8 @@ Concepts and features
 
  - Running OS commands, testing output and result values
 
-   * Works
-   * TODO: Better Windows support; CRLF handling
+   * Works; output is normalized to LF only for linebreaks on all platforms
+   * TODO: Better Windows support (not much tested)
    * TODO: Is it possible to capture stderr separately somehow?
 
  - Starting one or more additional nodes to run tests or suites on
