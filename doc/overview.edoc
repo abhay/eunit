@@ -543,6 +543,24 @@ expression is the atom `ok'. If testing is disabled, the macro will not
 generate any code except the atom `ok', and the command will not be
 executed.
 </dd>
+<dt>`cmd(CommandString)'</dt>
+<dd>Runs `CommandString' as an external command. Unless the returned
+status value is 0 (indicating success), an informative exception will be
+generated; otherwise, the result of the macro expression is the output
+produced by the command, as a flat string. The output is normalized to
+use a single LF character as line break on all platforms.
+
+This macro is useful in the setup and cleanup sections of fixtures,
+e.g., for creating and deleting files or perform similar operating
+system specific tasks, to make sure that the test system is informed of
+any failures.
+
+A Unix-specific example:
+```{setup,
+    fun () -> ?cmd("mktemp") end,
+    fun (FileName) -> ?cmd("rm " ++ FileName) end,
+    ...}'''
+</dd>
 </dl>
 
 
