@@ -34,6 +34,7 @@
 
 -define(AUTO_TIMEOUT, 60000).   %% auto test time limit
 
+%% TODO: pass options to server, such as default timeout?
 
 start(Server) when is_atom(Server) ->
     ensure_started(Server).
