@@ -158,7 +158,28 @@ higher_order_test_() ->
 			     ?_assert((X == 3) and (R == 4714))}
 	      end}
 	 ]}
-       }
+      },
+      {"With Test",
+       [{setup,
+ 	 fun () -> 4711 end,
+ 	 fun (4711) -> ok end,
+ 	 fun (X) ->
+ 		 {with, X,
+ 		  [fun (Y) -> ?assert(Y == 4711) end,
+ 		   fun (Y) -> ?assert(Y == 4711) end,
+ 		   fun (Y) -> ?assert(Y == 4711) end]}
+ 	 end},
+ 	{setup,
+ 	 fun () -> 4711 end,
+ 	 fun (4711) -> ok end,
+ 	 {with,
+ 	  [fun (X) -> ?assert(X == 4711) end,
+ 	   fun (X) -> ?assert(X == 4711) end,
+ 	   fun (X) -> ?assert(X == 4711) end]
+ 	 }
+ 	}
+       ]
+      }
      ]
     }.
 
