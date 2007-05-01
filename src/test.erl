@@ -140,25 +140,25 @@ higher_order_test_() ->
 	fun () -> 4711 end,
 	fun (4711) -> ok end,
 	[fun (R) -> {"1st", ?_assert(R == 4711)} end,
-	 [fun (R) -> {"2nd", ?_assert(R == 4711)} end],
+	 fun (R) -> {"2nd", ?_assert(R == 4711)} end,
 	 fun (R) -> {"3rd", ?_assert(R == 4711)} end]
        }
       },
       {"ForeachX Test",
-       {foreachx,
-	fun (X) -> 4711 + X end,
-	fun (X, R) when R - X == 4711 -> ok end,
-	[{1, fun (X, R) -> {"1st",
-			    ?_assert((X == 1) and (R == 4712))}
-	     end},
-	 [{2, fun (X, R) -> {"2nd",
+        {foreachx,
+	 fun (X) -> 4711 + X end,
+	 fun (X, R) when R - X == 4711 -> ok end,
+	 [{1, fun (X, R) -> {"1st",
+			     ?_assert((X == 1) and (R == 4712))}
+	      end},
+	  {2, fun (X, R) -> {"2nd",
 			     ?_assert((X == 2) and (R == 4713))}
-	      end}],
-	 {3, fun (X, R) -> {"3rd",
-			    ?_assert((X == 3) and (R == 4714))}
-	     end}
-	]}
-      }
+	      end},
+	  {3, fun (X, R) -> {"3rd",
+			     ?_assert((X == 3) and (R == 4714))}
+	      end}
+	 ]}
+       }
      ]
     }.
 
