@@ -468,15 +468,15 @@ win32_cmd_tests() ->
 
 
 %% ---------------------------------------------------------------------
-%% Wrapper around file:consult
+%% Wrapper around file:path_consult
 
 %% @throws {file_read_error, {Reason::atom(), Message::string(),
 %%                            fileName()}}
 
 consult_file(File) ->
-    case file:consult(File) of
-	{ok, Terms} ->
-	    Terms;
+    case file:path_consult(["."]++code:get_path(), File) of
+	{ok, Data, _Path} ->
+	    Data;
 	{error, Reason} ->
 	    Msg = file:format_error(Reason),
 	    throw({file_read_error, {Reason, Msg, File}})

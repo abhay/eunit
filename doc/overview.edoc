@@ -12,7 +12,7 @@
 @version {@version}, {@date} {@time}
 
 @doc EUnit is a unit testing framework for Erlang. It is very powerful
-and flexible, but is easy to use and has small syntactical overhead.
+and flexible, is easy to use, and has small syntactical overhead.
 
 <ul>
 <li>{@section Unit Testing}</li>
@@ -653,10 +653,6 @@ FileName}'.</dd>
 <dt>`{file, FileName::string()}'</dt>
 <dd>This takes a set of test descriptions from the named file, using
 the standard library function `file:consult(FileName)'.</dd>
-<dt>`{cmd, Command::string()}'</dt>
-<dd>Runs `Command' as a test using the host operating system command
-shell. The test succeeds if the command returns a zero status value, and
-fails otherwise.</dd>
 <dt>`{with, X::any(), [AbstractTestFun::((any()) -> any())]}'</dt>
 <dd>Distributes the value `X' over the unary functions in the list,
 turning them into nullary test functions. An `AbstractTestFun' is like

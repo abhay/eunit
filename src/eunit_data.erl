@@ -37,12 +37,13 @@
 %%          | [tests()]
 %%          | moduleName()
 %%          | {module, moduleName()}
+%%          | {application, appName()}
+%%          | {application, appName(), [term()]}
 %%          | fileName()
 %%          | {file, fileName()}
 %%          | {string(), tests()}
 %%          | {generator, () -> tests()}
 %%          | {generator, M::moduleName(), F::functionName()}
-%%          | {cmd, C}
 %%          | {spawn, tests()}
 %%          | {spawn, Node::atom(), tests()}
 %%          | {timeout, T::number(), tests()}
@@ -93,6 +94,7 @@
 %%
 %% @type moduleName() = atom()
 %% @type functionName() = atom()
+%% @type appName() = atom()
 %% @type fileName() = string()
 
 %% ---------------------------------------------------------------------
@@ -252,14 +254,6 @@ parse({generator, F} = T) when is_function(F) ->
     end;
 parse({generator, M, F}) when is_atom(M), is_atom(F) ->
     parse({generator, eunit_test:function_wrapper(M, F)});
-parse({cmd, C} = T) ->
-    case eunit_lib:is_string(C) of
-	true ->
-	    %% TODO: better identification for this kind of internal funs
-	    parse(fun () -> ?cmd(C) end);
-	false ->
-	    bad_test(T)
-    end;
 parse({inorder, T}) ->
     group(#group{tests = T, order = inorder});
 parse({inparallel, T}) ->
@@ -347,6 +341,20 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
     end;
 parse({module, M}) when is_atom(M) ->
     {data, {"module '" ++ atom_to_list(M) ++ "'", get_module_tests(M)}};
+parse({application, A}) when is_atom(A) ->
+    {data, {file, atom_to_list(A)++".app"}};
+parse({application, A, Info}=T) when is_atom(A) ->
+    case proplists:get_value(modules, Info) of
+	Ms when is_list(Ms) ->
+	    case [M || M <- Ms, not is_atom(M)] of
+		[] ->
+		    {data, {"application '" ++ atom_to_list(A) ++ "'", Ms}};
+		_ ->
+		    bad_test(T)
+	    end;
+	_ ->
+	    bad_test(T)
+    end;
 parse({file, F} = T) when is_list(F) ->
     case eunit_lib:is_string(F) of
 	true ->
@@ -619,7 +627,6 @@ data_test_() ->
      ?_assertMatch(ok, eunit:test({generator, fun () -> Tests end})),
      ?_assertMatch(ok, eunit:test({generator, fun generator/0})),
      ?_assertMatch(ok, eunit:test({generator, ?MODULE, generator_exported_})),
-     ?_assertMatch(ok, eunit:test({cmd, "echo hello"})),
      ?_assertMatch(ok, eunit:test({inorder, Tests})),
      ?_assertMatch(ok, eunit:test({inparallel, Tests})),
      ?_assertMatch(ok, eunit:test({timeout, 10, Tests})),

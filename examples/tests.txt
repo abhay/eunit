@@ -1,2 +1,1 @@
-{cmd, "echo hello"}.
 [eunit_lib].
