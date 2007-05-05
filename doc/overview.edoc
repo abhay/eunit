@@ -18,7 +18,6 @@ and flexible, is easy to use, and has small syntactical overhead.
 <li>{@section Unit Testing}</li>
 <li>{@section Terminology}</li>
 <li>{@section Getting started}</li>
-<li>{@section An example}</li>
 <li>{@section EUnit macros}</li>
 <li>{@section EUnit Test Representation}</li>
 </ul>
@@ -152,7 +151,9 @@ them, and easy to see which tests failed (so you can fix the bugs).
   <li>{@section Writing simple test functions}</li>
   <li>{@section Running EUnit}</li>
   <li>{@section Writing test generating functions}</li>
+  <li>{@section An example}</li>
   <li>{@section Disabling testing}</li>
+  <li>{@section Avoiding Compile-time dependency on EUnit}</li>
 </ul>
 
 === Including the EUnit header file ===
@@ -283,50 +284,7 @@ which has exactly the same meaning (note the `_assert' instead of
 `assert'). You can think of the initial underscore as signalling
 <em>test object</em>.
 
-
-=== Disabling testing ===
-
-Testing can be turned off by defining the `NOTEST' macro when compiling,
-for example as an option to `erlc', as in:
-```erlc -DNOTEST my_module.erl'''
-or by adding a macro definition to the code, <em>before any EUnit header
-file is included</em>:
-```-define(NOTEST, 1).'''
-(the value is not important, but should typically be 1 or `true').
-Note that unless the `EUNIT_NOAUTO' macro is defined, disabling testing
-will also automatically strip all test functions from the code, except
-for any that are explicitly declared as exported.
-
-For instance, to use EUnit in your application, but with testing turned
-off by default, put the following lines in a header file:
-```-define(NOTEST, true).
-   -include_lib("eunit/include/eunit.hrl").'''
-and then make sure that every module of your application includes that
-header file. This means that you have a only a single place to modify in
-order to change the default setting for testing. To override the `NOTEST'
-setting without modifying the code, you can define `TEST' in a compiler
-option, like this:
-```erlc -DTEST my_module.erl'''
-
-See {@section Compilation control macros} for details about these
-macros.
-
-
-=== Avoiding Compile-time dependencies on EUnit ===
-
-If you are distributing the source code for your application for other
-people to compile and run, you probably want to ensure that the code
-compiles even if EUnit is not available. Like the example in the
-previous section, you can put the following lines in a common header
-file:
-```-ifdef(TEST).
-   -include_lib("eunit/include/eunit.hrl").
-   -endif.'''
-and, of course, also make sure that you place all test code that uses
-EUnit macros within `-ifdef(TEST)' or `-ifdef(EUNIT)' sections.
-
-
-== An example ==
+=== An example ===
 
 Sometimes, an example says more than a thousand words. The following
 small Erlang module shows how EUnit can be used in practice.
@@ -355,6 +313,47 @@ immediately when I ran the tests.)
 
 See {@section EUnit Test Representation} for a full list of all the ways
 you can specify test sets in EUnit.
+
+=== Disabling testing ===
+
+Testing can be turned off by defining the `NOTEST' macro when compiling,
+for example as an option to `erlc', as in:
+```erlc -DNOTEST my_module.erl'''
+or by adding a macro definition to the code, <em>before any EUnit header
+file is included</em>:
+```-define(NOTEST, 1).'''
+(the value is not important, but should typically be 1 or `true').
+Note that unless the `EUNIT_NOAUTO' macro is defined, disabling testing
+will also automatically strip all test functions from the code, except
+for any that are explicitly declared as exported.
+
+For instance, to use EUnit in your application, but with testing turned
+off by default, put the following lines in a header file:
+```-define(NOTEST, true).
+   -include_lib("eunit/include/eunit.hrl").'''
+and then make sure that every module of your application includes that
+header file. This means that you have a only a single place to modify in
+order to change the default setting for testing. To override the `NOTEST'
+setting without modifying the code, you can define `TEST' in a compiler
+option, like this:
+```erlc -DTEST my_module.erl'''
+
+See {@section Compilation control macros} for details about these
+macros.
+
+=== Avoiding Compile-time dependency on EUnit ===
+
+If you are distributing the source code for your application for other
+people to compile and run, you probably want to ensure that the code
+compiles even if EUnit is not available. Like the example in the
+previous section, you can put the following lines in a common header
+file:
+```-ifdef(TEST).
+   -include_lib("eunit/include/eunit.hrl").
+   -endif.'''
+and, of course, also make sure that you place all test code that uses
+EUnit macros within `-ifdef(TEST)' or `-ifdef(EUNIT)' sections.
+
 
 == EUnit macros ==
 
