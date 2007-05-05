@@ -1,9 +1,14 @@
 
+include ../vsn.mk
+
 EMULATOR=beam
 # must have "eunit/ebin" as part of the path for include_lib to work, for now
 EBIN=../../eunit/ebin
 #EBIN=../ebin
 INCLUDE=../include
+
+APP_TARGET=$(EBIN)/eunit.app
+APPUP_TARGET=$(EBIN)/eunit.appup
 
 ERL_COMPILE_FLAGS += -I$(INCLUDE) +warn_unused_vars +nowarn_shadow_vars +warn_unused_import
 
@@ -35,3 +40,9 @@ clean:
 
 $(EBIN)/%.$(EMULATOR):%.erl
 	erlc -pa $(EBIN) -W $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
+
+$(APP_TARGET): eunit.app.src ../vsn.mk
+	sed -e 's;%VSN%;$(EUNIT_VSN);' $< > $@
+
+$(APPUP_TARGET): eunit.appup.src ../vsn.mk
+	sed -e 's;%VSN%;$(EUNIT_VSN);' $< > $@
