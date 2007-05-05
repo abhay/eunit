@@ -661,10 +661,12 @@ data_test_() ->
      %%?_test({foreach, Setup, [T, T, T]})
     ].
 
+%% TODO: document how to write lazy generators
+
 lazy_test_() ->
     {spawn, [?_test(undefined = put(count, 0)),
-	     lazy_gen(100),
-	     ?_assertMatch(100, get(count))]}.
+	     lazy_gen(7),
+	     ?_assertMatch(7, get(count))]}.
 
 lazy_gen(N) ->
     {generator,
