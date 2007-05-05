@@ -31,6 +31,7 @@
 
 -import(lists, [foldr/3]).
 
+%% TODO: document {application,...}, and xxx_tests modules
 
 %% @type tests() =
 %%            SimpleTest
@@ -484,28 +485,47 @@ get_module_tests(M) ->
     GeneratorSuffix = ?DEFAULT_GENERATOR_SUFFIX,
     try M:module_info(exports) of
 	Es ->
-	    foldr(fun ({F, 0}, Fs) ->
-			  N = atom_to_list(F),
-			  case lists:suffix(TestSuffix, N) of
-			      true ->
-				  [{M,F} | Fs];
-			      false ->
-				  case lists:suffix(GeneratorSuffix, N) of
-				      true ->
-					  [{generator, M, F} | Fs];
-				      false ->
-					  Fs
-				  end
-			  end;
-		      (_, Fs) ->
-			  Fs
-		  end,
-		  [],
-		  Es)
+	    Fs = testfuns(Es, M, TestSuffix, GeneratorSuffix),
+	    Name = atom_to_list(M),
+	    case lists:suffix(?DEFAULT_TESTMODULE_SUFFIX, Name) of
+		false ->
+		    Name1 = Name ++ ?DEFAULT_TESTMODULE_SUFFIX,
+		    M1 = list_to_atom(Name1),
+		    try get_module_tests(M1) of
+			Fs1 ->
+			    Fs ++ [{"module '" ++ Name1 ++ "'", Fs1}]
+		    catch
+			{module_not_found, M1} ->
+			    Fs
+		    end;
+		true ->
+		    Fs
+	    end
     catch
 	error:undef -> 
 	    throw({module_not_found, M})
     end.
+
+testfuns(Es, M, TestSuffix, GeneratorSuffix) ->
+    foldr(fun ({F, 0}, Fs) ->
+		  N = atom_to_list(F),
+		  case lists:suffix(TestSuffix, N) of
+		      true ->
+			  [{M,F} | Fs];
+		      false ->
+			  case lists:suffix(GeneratorSuffix, N) of
+			      true ->
+				  [{generator, M, F} | Fs];
+			      false ->
+				  Fs
+			  end
+		  end;
+	      (_, Fs) ->
+		  Fs
+	  end,
+	  [],
+	  Es).    
+
 
 %% ---------------------------------------------------------------------
 %% Reading tests from a file

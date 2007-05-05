@@ -11,6 +11,7 @@ SOURCES= \
 	eunit_autoexport.erl \
 	eunit_striptests.erl \
 	eunit.erl \
+	eunit_tests.erl \
 	eunit_server.erl \
 	eunit_proc.erl \
 	eunit_serial.erl \

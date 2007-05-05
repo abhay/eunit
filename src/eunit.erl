@@ -40,13 +40,6 @@
 -export([testp/1, debug/1]). %% for development testing, not official
 
 
--ifdef(TEST).
-%% Cause all the other modules to be tested as well as this one.
-full_test_() ->
-    [eunit_proc, eunit_test, eunit_lib, eunit_data, eunit_tty].
--endif.
-
-
 %% EUnit entry points
 
 start() ->
