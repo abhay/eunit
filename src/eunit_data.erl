@@ -26,12 +26,12 @@
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
+-include_lib("kernel/include/file.hrl").
+
 -export([list/1, iter_init/2, iter_next/2, iter_prev/2, iter_id/1, 
 	 list_size/1, enter_context/3]).
 
 -import(lists, [foldr/3]).
-
-%% TODO: document {application,...}, and xxx_tests modules
 
 %% @type tests() =
 %%            SimpleTest
@@ -123,6 +123,7 @@ iter_id(#iter{pos = N, parent = Ns}) ->
 %%       | {generator_failed, exception()}
 %%       | {no_such_function, eunit_lib:mfa()}
 %%       | {module_not_found, moduleName()}
+%%       | {application_not_found, appName()}
 %%       | {file_read_error, {Reason::atom(), Message::string(),
 %%                            fileName()}}
 
@@ -185,6 +186,7 @@ iter_prev(#iter{prev = [T | Ts]} = I) ->
 %%       | {generator_failed, eunit_lib:exception()}
 %%       | {no_such_function, eunit_lib:mfa()}
 %%       | {module_not_found, moduleName()}
+%%       | {application_not_found, appName()}
 
 next(Tests) ->
     case eunit_lib:dlist_next(Tests) of
@@ -341,9 +343,26 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
 	    bad_test(T)
     end;
 parse({module, M}) when is_atom(M) ->
+    %% TODO: add {module, Reload=true/false, M}, as for object files
     {data, {"module '" ++ atom_to_list(M) ++ "'", get_module_tests(M)}};
 parse({application, A}) when is_atom(A) ->
-    {data, {file, atom_to_list(A)++".app"}};
+    try parse({file, atom_to_list(A)++".app"})
+    catch
+	{file_read_error,{enoent,_,_}} ->
+	    case code:lib_dir(A) of
+		Dir when is_list(Dir) ->
+		    %% add "ebin" if it exists, like code_server does
+		    BinDir = filename:join(Dir, "ebin"),
+		    case file:read_file_info(BinDir) of
+			{ok, #file_info{type=directory}} ->
+			    parse({dir, BinDir});
+			_ ->
+			    parse({dir, Dir})
+		    end;
+		_ ->
+		    throw({application_not_found, A})
+	    end
+    end;
 parse({application, A, Info}=T) when is_atom(A) ->
     case proplists:get_value(modules, Info) of
 	Ms when is_list(Ms) ->
@@ -360,6 +379,13 @@ parse({file, F} = T) when is_list(F) ->
     case eunit_lib:is_string(F) of
 	true ->
 	    {data, {"file \"" ++ F ++ "\"", get_file_tests(F)}};
+	false ->
+	    bad_test(T)
+    end;
+parse({dir, D}=T) when is_list(D) ->
+    case eunit_lib:is_string(D) of
+	true ->
+	    {data, {"directory \"" ++ D ++ "\"", get_directory_modules(D)}};
 	false ->
 	    bad_test(T)
     end;
@@ -386,7 +412,12 @@ parse(M) when is_atom(M) ->
 parse(T) when is_list(T) ->
     case eunit_lib:is_string(T) of
 	true ->
-	    parse({file, T});
+	    try parse({dir, T})
+	    catch
+		{file_read_error,{R,_,_}}
+		  when R =:= enotdir; R =:= enoent ->
+		    parse({file, T})
+	    end;
 	false ->
 	    bad_test(T)
     end;
@@ -528,13 +559,66 @@ testfuns(Es, M, TestSuffix, GeneratorSuffix) ->
 
 
 %% ---------------------------------------------------------------------
-%% Reading tests from a file
+%% Getting a test set from a file
 
 %% @throws {file_read_error, {Reason::atom(), Message::string(),
 %%                            fileName()}}
 
 get_file_tests(F) ->
-    eunit_lib:consult_file(F).
+    case is_module_filename(F) of
+	true ->
+	    %% look relative to current dir first
+	    case file:read_file_info(F) of
+		{ok, #file_info{type=file}} ->
+		    objfile_test(F);
+		_ ->
+		    %% (where_is_file/1 does not take a path argument)
+		    case code:where_is_file(F) of
+			non_existing ->
+			    %% this will produce a suitable error message
+			    objfile_test(F);
+			Path ->
+			    objfile_test(Path)
+		    end
+	    end;
+	false ->
+	    eunit_lib:consult_file(F)
+    end.
+
+is_module_filename(F) ->
+    filename:extension(F) =:= code:objfile_extension().
+
+objfile_test(File) ->
+    try
+	{value, {module, M}} =
+	lists:keysearch(module, 1, beam_lib:info(File)),
+	{setup,
+	 fun () ->
+		 %% TODO: better error/stacktrace for this internal fun
+		 code:purge(M),
+		 {module,M} = code:load_abs(filename:rootname(File)),
+		 ok
+	 end,
+	 M}
+    catch
+	_:_ ->
+	    throw({file_read_error,
+		   {undefined, "extracting module name failed", File}})
+    end.
+
+
+%% ---------------------------------------------------------------------
+%% Getting a list of module names from object files in a directory
+
+%% @throws {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
+
+%% TODO: handle packages (recursive search for files)
+
+get_directory_modules(D) ->
+    [objfile_test(filename:join(D, F))
+     || F <- eunit_lib:list_dir(D), is_module_filename(F)].
+
 
 
 %% ---------------------------------------------------------------------

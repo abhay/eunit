@@ -10,7 +10,7 @@
 <h1>EUnit - a Lightweight Unit Testing Framework for Erlang
 </h1>
 <p>Copyright © 2004-2007 Mickaël Rémond, Richard Carlsson</p>
-<p><b>Version:</b> 2.0 beta 1, May 5 2007 15:52:00
+<p><b>Version:</b> 2.0 beta 1, May 8 2007 22:23:41
 </p>
 <p><b>Authors:</b> Richard Carlsson (<a href="mailto:richardc@it.uu.se"><tt>richardc@it.uu.se</tt></a>) [<em>web site:</em> <tt><a href="http://user.it.uu.se/~richardc/" target="_top">http://user.it.uu.se/~richardc/</a></tt>], Mickaël Rémond (<a href="mailto:mickael.remond@process-one.net"><tt>mickael.remond@process-one.net</tt></a>) [<em>web site:</em> <tt><a href="http://www.process-one.net/" target="_top">http://www.process-one.net/</a></tt>].</p>
 <p>EUnit is a unit testing framework for Erlang. It is very powerful
@@ -630,28 +630,79 @@ instead of adding an extra tuple wrapper as in <code>{"The Title", {...}}</code>
 The following are primitives, which do not contain other test sets as
 arguments:
 <dl>
-<dt><code>{generator, GenFun::(() -&gt; Tests)}</code></dt>
+<dt><code>{generator, GenFun::(() -&gt; Tests)}</code>
+</dt>
 <dd>The generator function <code>GenFun</code> is called to produce a test
-set.</dd>
-<dt><code>{generator, ModuleName::atom(), FunctionName::atom()}</code></dt>
+set.
+</dd>
+<dt><code>{generator, ModuleName::atom(), FunctionName::atom()}</code>
+</dt>
 <dd>The function <code>ModuleName:FunctionName()</code> is called to produce a test
-set.</dd>
-<dt><code>ModuleName::atom()</code></dt>
+set.
+</dd>
+<dt><code>ModuleName::atom()</code>
+</dt>
 <dd>A single atom represents a module name, and is equivalent to
 <code>{module, ModuleName}</code>. This is often used as in the call
-<code>eunit:test(some_module)</code>.</dd>
-<dt><code>{module, ModuleName::atom()}</code></dt>
-<dd>This composes a test set from the exported test functions of the
+<code>eunit:test(some_module)</code>.
+</dd>
+<dt><code>{module, ModuleName::atom()}</code>
+</dt>
+<dd><p>This composes a test set from the exported test functions of the
 named module, i.e., those functions with arity zero whose names end
 with <code>_test</code> or <code>_test_</code>. Basically, the <code>..._test()</code> functions become
-simple tests, while the <code>..._test_()</code> functions become generators.</dd>
-<dt><code>FileName::string()</code></dt>
-<dd>A single string represents a file name, and is equivalent to <code>{file,
-FileName}</code>.</dd>
-<dt><code>{file, FileName::string()}</code></dt>
-<dd>This takes a set of test descriptions from the named file, using
-the standard library function <code>file:consult(FileName)</code>.</dd>
-<dt><code>{with, X::any(), [AbstractTestFun::((any()) -&gt; any())]}</code></dt>
+simple tests, while the <code>..._test_()</code> functions become generators.</p>
+
+In addition, EUnit will also look for another module whose name is
+<code>ModuleName</code> plus the suffix <code>_tests</code>, and if it exists, all the tests
+from that module will also be added. (If <code>ModuleName</code> already contains
+the suffix <code>_tests</code>, this is not done.) E.g., the specification
+<code>{module, mymodule}</code> will run all tests in the modules <code>mymodule</code> and
+<code>mymodule_tests</code>. Typically, the <code>_tests</code> module should only contain
+test cases that use the public interface of the main module (and no
+other code).
+</dd>
+<dt><code>{application, AppName::atom(), Info::list()}</code>
+</dt>
+<dd>This is a normal Erlang/OTP application descriptor, as found in an
+ <code>.app</code> file. The resulting test set consists of the modules listed in
+ the <code>modules</code> entry in <code>Info</code>.
+</dd>
+<dt><code>{application, AppName::atom()}</code>
+</dt>
+<dd>This creates a test set from all the modules belonging to the
+specified application, by consulting the application's <code>.app</code> file
+(see <code>{file, FileName}</code>), or if no such file exists, by testing all
+object files in the application's <tt>ebin</tt>-directory (see <code>{dir,
+Path}</code>); if that does not exist, the <code>code:lib_dir(AppName)</code> directory
+is used.
+</dd>
+<dt><code>Path::string()</code>
+</dt>
+<dd>A single string represents the path of a file or directory, and is
+equivalent to <code>{file, Path}</code>, or <code>{dir, Path}</code>, respectively, depending
+on what <code>Path</code> refers to in the file system.
+</dd>
+<dt><code>{file, FileName::string()}</code>
+</dt>
+<dd><p>If <code>FileName</code> has a suffix that indicates an object file (<code>.beam</code>),
+EUnit will try to reload the module from the specified file and test it.
+Otherwise, the file is assumed to be a text file containing test
+specifications, which will be read using the standard library function
+<code>file:path_consult/2</code>.</p>
+
+Unless the file name is absolute, the file is first searched for
+relative to the current directory, and then using the normal search path
+(<code>code:get_path()</code>). This means that the names of typical "app" files
+can be used directly, without a path, e.g., <code>"mnesia.app"</code>.
+</dd>
+<dt><code>{dir, Path::string()}</code>
+</dt>
+<dd>This tests all object files in the specified directory, as if they
+had been individually specified using <code>{file, FileName}</code>.
+</dd>
+<dt><code>{with, X::any(), [AbstractTestFun::((any()) -&gt; any())]}</code>
+</dt>
 <dd>Distributes the value <code>X</code> over the unary functions in the list,
 turning them into nullary test functions. An <code>AbstractTestFun</code> is like
 an ordinary test fun, but takes one argument instead of zero - it's
@@ -801,6 +852,6 @@ operations. In general, 'local' should only be used when:
 
 <hr>
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, May 5 2007, 15:52:00.</i></p>
+<p><i>Generated by EDoc, May 8 2007, 22:23:41.</i></p>
 </body>
 </html>

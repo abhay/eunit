@@ -32,7 +32,7 @@
 
 -export([dlist_next/1, uniq/1, fun_parent/1, is_string/1, browse_fun/1,
 	 command/1, command/2, command/3, trie_new/0, trie_store/2,
-	 trie_match/2, split_node/1, consult_file/1]).
+	 trie_match/2, split_node/1, consult_file/1, list_dir/1]).
 
 
 %% Type definitions for describing exceptions
@@ -480,6 +480,21 @@ consult_file(File) ->
 	{error, Reason} ->
 	    Msg = file:format_error(Reason),
 	    throw({file_read_error, {Reason, Msg, File}})
+    end.
+
+%% ---------------------------------------------------------------------
+%% Wrapper around file:list_dir
+
+%% @throws {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
+
+list_dir(Dir) ->
+    case file:list_dir(Dir) of
+	{ok, Fs} ->
+	    Fs;
+	{error, Reason} ->
+	    Msg = file:format_error(Reason),
+	    throw({file_read_error, {Reason, Msg, Dir}})
     end.
 
 %% ---------------------------------------------------------------------

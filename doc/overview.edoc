@@ -1,3 +1,4 @@
+
 			-*- html -*-
 
 	EUnit overview page
@@ -631,28 +632,79 @@ instead of adding an extra tuple wrapper as in `{"The Title", {...}}'.
 The following are primitives, which do not contain other test sets as
 arguments:
 <dl>
-<dt>`{generator, GenFun::(() -> Tests)}'</dt>
+<dt>`{generator, GenFun::(() -> Tests)}'
+</dt>
 <dd>The generator function `GenFun' is called to produce a test
-set.</dd>
-<dt>`{generator, ModuleName::atom(), FunctionName::atom()}'</dt>
+set.
+</dd>
+<dt>`{generator, ModuleName::atom(), FunctionName::atom()}'
+</dt>
 <dd>The function `ModuleName:FunctionName()' is called to produce a test
-set.</dd>
-<dt>`ModuleName::atom()'</dt>
+set.
+</dd>
+<dt>`ModuleName::atom()'
+</dt>
 <dd>A single atom represents a module name, and is equivalent to
 `{module, ModuleName}'. This is often used as in the call
-`eunit:test(some_module)'.</dd>
-<dt>`{module, ModuleName::atom()}'</dt>
+`eunit:test(some_module)'.
+</dd>
+<dt>`{module, ModuleName::atom()}'
+</dt>
 <dd>This composes a test set from the exported test functions of the
 named module, i.e., those functions with arity zero whose names end
 with `_test' or `_test_'. Basically, the `..._test()' functions become
-simple tests, while the `..._test_()' functions become generators.</dd>
-<dt>`FileName::string()'</dt>
-<dd>A single string represents a file name, and is equivalent to `{file,
-FileName}'.</dd>
-<dt>`{file, FileName::string()}'</dt>
-<dd>This takes a set of test descriptions from the named file, using
-the standard library function `file:consult(FileName)'.</dd>
-<dt>`{with, X::any(), [AbstractTestFun::((any()) -> any())]}'</dt>
+simple tests, while the `..._test_()' functions become generators.
+
+In addition, EUnit will also look for another module whose name is
+`ModuleName' plus the suffix `_tests', and if it exists, all the tests
+from that module will also be added. (If `ModuleName' already contains
+the suffix `_tests', this is not done.) E.g., the specification
+`{module, mymodule}' will run all tests in the modules `mymodule' and
+`mymodule_tests'. Typically, the `_tests' module should only contain
+test cases that use the public interface of the main module (and no
+other code).
+</dd>
+<dt>`{application, AppName::atom(), Info::list()}'
+</dt>
+<dd>This is a normal Erlang/OTP application descriptor, as found in an
+ `.app' file. The resulting test set consists of the modules listed in
+ the `modules' entry in `Info'.
+</dd>
+<dt>`{application, AppName::atom()}'
+</dt>
+<dd>This creates a test set from all the modules belonging to the
+specified application, by consulting the application's `.app' file
+(see `{file, FileName}'), or if no such file exists, by testing all
+object files in the application's <tt>ebin</tt>-directory (see `{dir,
+Path}'); if that does not exist, the `code:lib_dir(AppName)' directory
+is used.
+</dd>
+<dt>`Path::string()'
+</dt>
+<dd>A single string represents the path of a file or directory, and is
+equivalent to `{file, Path}', or `{dir, Path}', respectively, depending
+on what `Path' refers to in the file system.
+</dd>
+<dt>`{file, FileName::string()}'
+</dt>
+<dd>If `FileName' has a suffix that indicates an object file (`.beam'),
+EUnit will try to reload the module from the specified file and test it.
+Otherwise, the file is assumed to be a text file containing test
+specifications, which will be read using the standard library function
+`file:path_consult/2'.
+
+Unless the file name is absolute, the file is first searched for
+relative to the current directory, and then using the normal search path
+(`code:get_path()'). This means that the names of typical "app" files
+can be used directly, without a path, e.g., `"mnesia.app"'.
+</dd>
+<dt>`{dir, Path::string()}'
+</dt>
+<dd>This tests all object files in the specified directory, as if they
+had been individually specified using `{file, FileName}'.
+</dd>
+<dt>`{with, X::any(), [AbstractTestFun::((any()) -> any())]}'
+</dt>
 <dd>Distributes the value `X' over the unary functions in the list,
 turning them into nullary test functions. An `AbstractTestFun' is like
 an ordinary test fun, but takes one argument instead of zero - it's
