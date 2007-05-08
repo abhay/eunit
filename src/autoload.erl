@@ -156,14 +156,14 @@ server_command(From, {watch, {module, M}, Opts}, St) ->
 
 file_event({exists, Path, dir, _Info, Files}, St) ->
     %%erlang:display({autoload_saw_exists, dir, Path}),
-    server(monitor_beams(Path, Files, St));
+    server(monitor_objs(Path, Files, St));
 file_event({exists, Path, file, Info, _}, St) ->
     %%erlang:display({autoload_saw_exists, file, Path}),
     %% treat file-exists messages just like file-changed messages
     server(changed_file(Path, Info#file_info.mtime, St));
 file_event({changed, Path, dir, _Info, Files}, St) ->
     %%erlang:display({autoload_saw_changed, dir, Path}),
-    server(monitor_beams(Path, Files, St));
+    server(monitor_objs(Path, Files, St));
 file_event({changed, Path, file, #file_info{}=Info, _}, St) ->
     %%erlang:display({autoload_saw_changed, file, Path}),
     server(changed_file(Path, Info#file_info.mtime, St));
@@ -206,9 +206,10 @@ monitor_module(M, Opts, St) ->
 
 %% called when a monitored directory is detected as new or changed
 
-monitor_beams(Path, Files, St) ->
+monitor_objs(Path, Files, St) ->
     Opts = get_dir_opts(Path, St),
-    Beams = [F || {added, F} <- Files, filename:extension(F) == ".beam"],
+    ObjExt = file:objfile_extension(),
+    Objs = [F || {added, F} <- Files, filename:extension(F) == ObjExt],
     lists:foldl(
       fun (F, St) ->
 	      F1 = filename:absname(filename:join(Path, F)),
@@ -216,7 +217,7 @@ monitor_beams(Path, Files, St) ->
 	      monitor_file(F1, Opts, St)
       end,
       St,
-      Beams).
+      Objs).
 
 get_dir_opts(Path, St) ->
     case dict:find(Path, St#state.dirs) of
@@ -253,7 +254,7 @@ loaded_module(M, Time, St) ->
 
 changed_file(File, Time, St) ->
     %% always reread the module name from the file
-    case beam_module(File) of
+    case obj_module(File) of
 	{module, M} ->
 	    case find_record(M, St) of
 		{ok, R} ->
@@ -334,7 +335,7 @@ ensure_loaded(M, File, Opts) ->
 	true when is_atom(M) ->
 	    ensure_loaded_1(M, File);  %% known module name
 	true when M == [] ->
-	    case beam_module(File) of
+	    case obj_module(File) of
 		{module, Module} ->
 		    ensure_loaded_1(Module, File);
 		error ->
@@ -355,9 +356,9 @@ ensure_loaded_1(M, File) ->
 	    code:load_abs(File)  %% ignore result    
     end.
 
-%% find name of module stored in a beam file
+%% find name of module stored in an object file
 
-beam_module(File) ->
+obj_module(File) ->
     case beam_lib:info(File) of
 	List when is_list(List) ->
 	    case lists:keysearch(module, 1, List) of
