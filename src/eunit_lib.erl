@@ -169,45 +169,6 @@ error_msg(Title, Fmt, Args) ->
 
 
 %% ---------------------------------------------------------------------
-%% Error reporting (TODO)
-
-%% error(What) ->
-%%     error([], What).
-
-%% error(Where, What) ->
-%%     error(0, Where, What).
-
-%% error(Line, Where, S) when list(S) ->
-%%     report(Line, Where, S, []);
-%% error(Line, Where, {S, D}) when list(S) ->
-%%     report(Line, Where, S, D);
-%% error(Line, Where, {format_error, M, D}) ->
-%%     report(Line, Where, M:format_error(D), []).
-
-
-%% report(S, Vs) ->
-%%     report([], S, Vs).
-
-%% report(Where, S, Vs) ->
-%%     report(0, Where, S, Vs).
-
-%% report(L, Where, S, Vs) ->
-%%     io:put_chars(where(Where)),
-%%     if integer(L), L > 0 ->
-%% 	    io:fwrite("at line ~w: ", [L]);
-%%        true ->
-%% 	    ok
-%%     end,
-%%     io:fwrite(S, Vs),
-%%     io:nl().
-
-%% where([]) ->
-%%     io_lib:fwrite("~s: ", [?APPLICATION]);
-%% where(File) when list(File) ->
-%%     File ++ ": ".
-
-
-%% ---------------------------------------------------------------------
 %% Deep list iterator; accepts improper lists/sublists, and also accepts
 %% non-lists on the top level. Nonempty strings (not deep strings) are
 %% recognized as separate elements, even on the top level. (It is not
