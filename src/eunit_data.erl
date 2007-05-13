@@ -119,14 +119,6 @@ iter_init(Tests, ParentID) ->
 iter_id(#iter{pos = N, parent = Ns}) ->
     lists:reverse(Ns, [N]).
 
-%% @throws {bad_test, term()}
-%%       | {generator_failed, exception()}
-%%       | {no_such_function, eunit_lib:mfa()}
-%%       | {module_not_found, moduleName()}
-%%       | {application_not_found, appName()}
-%%       | {file_read_error, {Reason::atom(), Message::string(),
-%%                            fileName()}}
-
 %% @spec (testIterator(), Handler) -> none | {testItem(), testIterator()}
 %%    Handler = (term()) -> term()
 
@@ -136,16 +128,7 @@ iter_next(I, H) ->
 iter_do(F, I, H) ->
     try F(I)
     catch
-	R = {bad_test, _Bad} ->
-	    H(R);
-	R = {generator_failed, _Exception} ->
-	    H(R);
-	R = {no_such_function, _MFA} ->
-	    H(R);
-	R = {module_not_found, _M} ->
-	    H(R);
-	R = {file_read_error, _Info} ->
-	    H(R)
+	throw:R -> H(R)
     end.
 
 iter_next(I = #iter{next = []}) ->
@@ -181,12 +164,13 @@ iter_prev(#iter{prev = [T | Ts]} = I) ->
 
 %% @spec (tests()) -> none | {testItem(), tests()}
 %% @type testItem() = #test{} | #group{}
-%% 
 %% @throws {bad_test, term()}
-%%       | {generator_failed, eunit_lib:exception()}
+%%       | {generator_failed, exception()}
 %%       | {no_such_function, eunit_lib:mfa()}
 %%       | {module_not_found, moduleName()}
 %%       | {application_not_found, appName()}
+%%       | {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
 
 next(Tests) ->
     case eunit_lib:dlist_next(Tests) of
@@ -343,7 +327,6 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
 	    bad_test(T)
     end;
 parse({module, M}) when is_atom(M) ->
-    %% TODO: add {module, Reload=true/false, M}, as for object files
     {data, {"module '" ++ atom_to_list(M) ++ "'", get_module_tests(M)}};
 parse({application, A}) when is_atom(A) ->
     try parse({file, atom_to_list(A)++".app"})
@@ -599,7 +582,7 @@ objfile_test(File) ->
 		 {module,M} = code:load_abs(filename:rootname(File)),
 		 ok
 	 end,
-	 M}
+	 {module, M}}
     catch
 	_:_ ->
 	    throw({file_read_error,
@@ -627,8 +610,8 @@ get_directory_modules(D) ->
 %% @spec (Tests::#context{}, Instantiate, Callback) -> any()
 %%    Instantiate = (any()) -> tests()
 %%    Callback = (tests()) -> any()
-%% @throws {ErrorType, eunit_lib:exception()}
-%% ErrorType = setup_failed | instantiation_failed | cleanup_failed
+%% @throws {context_error, Error, eunit_lib:exception()}
+%% Error = setup_failed | instantiation_failed | cleanup_failed
 
 enter_context(#context{setup = S, cleanup = C, process = P}, I, F) ->
     F1 = case P of
@@ -650,8 +633,15 @@ enter_context(#context{setup = S, cleanup = C, process = P}, I, F) ->
 %% @type testName() = {moduleName(), functionName()}
 %%		    | {moduleName(), functionName(), lineNumber()}
 %% @type lineNumber() = integer().  Proper line numbers are always >= 1.
-
-%% @throws {error, Reason::term()}
+%%
+%% @throws {bad_test, term()}
+%%       | {generator_failed, exception()}
+%%       | {no_such_function, eunit_lib:mfa()}
+%%       | {module_not_found, moduleName()}
+%%       | {application_not_found, appName()}
+%%       | {file_read_error, {Reason::atom(), Message::string(),
+%%                            fileName()}}
+%%       | {context_error, instantiation_failed, eunit_lib:exception()}
 
 list(T) ->
     list(T, []).
@@ -693,12 +683,7 @@ list_context(#context{process = {spawn, N}}, T, ParentId) ->
     browse_context(T, fun (T) -> list({spawn, N, T}, ParentId) end).
 
 browse_context(T, F) ->
-    try
- 	eunit_test:browse_context(T, F)
-    catch
- 	R = instantiation_failed ->
- 	    throw(R)
-    end.
+    eunit_test:browse_context(T, F).
 
 list_size({item, _, _, _}) -> 1;
 list_size({group, _, _, Es}) -> list_size(Es);    

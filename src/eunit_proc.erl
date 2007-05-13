@@ -60,21 +60,30 @@ start(Tests, Order, Super, Reference)
 %%   {progress, 'begin', test | group}
 %%       indicates that the item has been entered, and what type it is
 %%
-%%   {progress, 'end', {Status, Time, StdOutput}}
-%%       Status is 'ok' or {error, Exception}
-%%       Time is an integer, in milliseconds
-%%       StdOutput is an IO-list
+%%   {progress, 'end', {Status, Time::integer(), Output::io_list()}}
+%%       Status = 'ok' | {error, Exception} | {skipped, Cause}
 %%
-%%   {cancel, Reason}
-%%       where Reason can be:
+%%       where Time is measured in milliseconds and Output is the data
+%%       written to the standard output stream during the test; if
+%%       Status is {skipped, Cause}, then Cause is a term thrown from
+%%       eunit_test:run_testfun/1
+%%
+%%   {cancel, Descriptor}
+%%       where Descriptor can be:
 %%           timeout            a timeout occurred
+%%           {blame, Id}        forced to terminate because of item `Id'
+%%           {abort, Cause}     the test failed to execute
 %%           {exit, Reason}     the test process terminated unexpectedly
-%%           {abort, Reason}    the test failed to execute
 %%           {startup, Reason}  failed to start a remote test process
-%%           {blame, Id}        had to terminate because of item `Id'
 %%
-%% Note that there are *no* strict ordering guarantees on the status
-%% messages, due to concurrent (and possibly distributed) execution!
+%%       where Cause is a term thrown from eunit_data:enter_context/4 or
+%%       from eunit_data:iter_next/2, and Reason is an exit term from a
+%%       crashed process
+%%
+%% Note that due to concurrent (and possibly distributed) execution,
+%% there are *no* strict ordering guarantees on the status messages,
+%% with one exception: a 'begin' message will always arrive before its
+%% corresponding 'end' message.
 
 status_message(Id, Info, St) ->
     St#procstate.super ! {status, Id, Info}.
@@ -231,8 +240,8 @@ insulator_wait(Child, Parent, Buf, St) ->
 	{cancel, Child, Id, Reason} ->
 	    status_message(Id, {cancel, Reason}, St),
 	    insulator_wait(Child, Parent, Buf, St);
-	{abort, Child, Id, Reason} ->
-	    exit_messages(Id, {abort, Reason}, St),
+	{abort, Child, Id, Cause} ->
+	    exit_messages(Id, {abort, Cause}, St),
 	    %% no need to wait for the {'EXIT',Child,_} message
 	    terminate_insulator(St);
 	{timeout, Child, Id} ->
@@ -275,8 +284,8 @@ exit_messages(Id, Cause, St) ->
 %% Child processes send all messages via the insulator to ensure proper
 %% sequencing with timeouts and exit signals.
 
-abort_message(Reason, St) ->
-    St#procstate.insulator ! {abort, self(), St#procstate.id, Reason}.
+abort_message(Cause, St) ->
+    St#procstate.insulator ! {abort, self(), St#procstate.id, Cause}.
 
 cancel_message(Msg, St) ->
     St#procstate.insulator ! {cancel, self(), St#procstate.id, Msg}.
@@ -332,16 +341,19 @@ child_process(Fun, St) ->
     try Fun() of
 	_ -> ok
     catch
-	{abort, Reason} ->
-	    abort_message(Reason, St),
+	%% the only "normal" way for a child process to bail out is to
+	%% throw an {eunit_abort, Reason} exception; any other exception
+	%% will be reported as an unexpected termination of the test
+	{eunit_abort, Cause} ->
+	    abort_message(Cause, St),
 	    exit(aborted)
     end.
 
 %% @throws abortException()
-%% @type abortException() = {abort, Reason::term()}
+%% @type abortException() = {abort, Cause::term()}
 
-abort_task(Reason) ->
-    throw({abort, Reason}).
+abort_task(Cause) ->
+    throw({eunit_abort, Cause}).
 
 %% Typically, the process that executes this code is trapping signals,
 %% but it might not be - it is outside of our control, since test code
@@ -444,10 +456,8 @@ handle_test(T, St) ->
     progress_message('end', {Status, Time}, St),
     ok.
 
-%% @spec (#test{}) ->
-%%   ok | {error, eunit_lib:exception()} | {skipped, SkipReason}
-%% SkipReason = {module_not_found, moduleName()}
-%%            | {no_such_function, mfa()}
+%% @spec (#test{}) -> ok | {error, eunit_lib:exception()}
+%%                  | {skipped, eunit_test:wrapperError()}
 
 run_test(#test{f = F}) ->
     try eunit_test:run_testfun(F) of
@@ -457,10 +467,7 @@ run_test(#test{f = F}) ->
 	{error, Exception} ->
 	    {error, Exception}
     catch
-	R = {module_not_found, _M} ->
-	    {skipped, R};
-	R = {no_such_function, _MFA} ->
-	    {skipped, R}
+	throw:WrapperError -> {skipped, WrapperError}
     end.
 
 set_group_order(#group{order = undefined}, St) ->
@@ -490,31 +497,23 @@ run_group(T, St) ->
     Timeout = T#group.timeout,
     progress_message('begin', group, St),
     F = fun (T) -> enter_group(T, Timeout, St) end,
-    case with_context(T, F) of
-	{ok, {Status, Time}} ->
-	    progress_message('end', {Status, Time}, St),
-	    ok;
-	{error, Reason} ->
-	    cancel_message({abort, Reason}, St),
-	    error
-    end.
+    try with_context(T, F) of
+	{Status, Time} ->
+	    progress_message('end', {Status, Time}, St)
+    catch
+	throw:Cause ->
+	    cancel_message({abort, Cause}, St)
+    end,
+    ok.
 
 enter_group(T, Timeout, St) ->
     with_timeout(Timeout, ?DEFAULT_GROUP_TIMEOUT,
 		 fun () -> tests(T, St) end, St).
 
 with_context(#group{context = undefined, tests = T}, F) ->
-    {ok, F(T)};
+    F(T);
 with_context(#group{context = #context{} = C, tests = I}, F) ->
-    try
-	{ok, eunit_data:enter_context(C, I, F)}
-    catch
-	{Type, _Exception} = Term
-	  when Type == setup_failed;
-	       Type == instantiation_failed;
-	       Type == cleanup_failed ->
-	    {error, Term}
-    end.
+    eunit_data:enter_context(C, I, F).
 
 %% Implementation of buffering I/O for the insulator process. (Note that
 %% each batch of characters is just pushed on the buffer, so it needs to

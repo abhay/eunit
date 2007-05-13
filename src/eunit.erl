@@ -25,8 +25,6 @@
 
 -module(eunit).
 
-%% @TODO make a logger process to capture all events unconditionally
-
 -include("eunit.hrl").
 -include("eunit_internal.hrl").
 
@@ -111,31 +109,41 @@ test(T, Options) ->
     test(?SERVER, T, Options).
 
 test(Server, T, Options) ->
+    %% TODO: try to eliminate call to list/1
     try eunit_data:list(T) of
 	List ->
-	    Front = eunit_tty:start(List, Options),
-	    Serial = eunit_serial:start([Front]),
+	    Listeners = [eunit_tty:start(List, Options)
+			 | listeners(Options)],
+	    Serial = eunit_serial:start(Listeners),
 	    case eunit_server:start_test(Server, Serial, T, Options) of
-		{ok, Reference} -> test_run(Reference, Front);
+		{ok, Reference} -> test_run(Reference, Listeners);
 		{error, R} -> {error, R}
 	    end
     catch
-	{error, R} -> {error, R}
+	{error, R} ->
+	    io:put_chars(eunit_lib:format_error(R)),
+	    {error, R}
     end.
 
-test_run(Reference, Front) ->
+test_run(Reference, Listeners) ->
     receive
 	{start, Reference} ->
-	    Front ! {start, Reference}
+	    cast(Listeners, {start, Reference})
     end,
     receive
 	{done, Reference} ->
-	    Front ! {stop, Reference, self()},
+	    cast(Listeners, {stop, Reference, self()}),
 	    receive 
 		{result, Reference, Result} ->
 		    Result
 	    end
     end.
+
+cast([P | Ps], Msg) ->
+    P ! Msg,
+    cast(Ps, Msg);
+cast([], Msg) ->
+    Msg.
 
 %% TODO: functions that run tests on a given node, not a given server
 %% TODO: maybe some functions could check for a globally registered server?
@@ -150,6 +158,37 @@ submit(T, Options) ->
 submit(Server, T, Options) ->
     Dummy = spawn(fun devnull/0),
     eunit_server:start_test(Server, Dummy, T, Options).
+
+listeners(Options) ->
+    case proplists:get_value(event_log, Options) of
+	undefined ->
+	    [];
+	LogFile ->
+	    [spawn(fun () -> event_logger(LogFile) end)]
+    end.
+
+%% TODO: make this report file errors
+event_logger(LogFile) ->
+    case file:open(LogFile, [write]) of
+	{ok, FD} ->
+	    receive
+		{start, Reference} ->
+		    event_logger_loop(Reference, FD)
+	    end;
+	Error ->
+	    exit(Error)
+    end.
+
+event_logger_loop(Reference, FD) ->
+    receive
+	{status, _Id, _Info}=Msg ->
+	    io:fwrite(FD, "~w.\n", [Msg]),
+	    event_logger_loop(Reference, FD);
+	{stop, Reference, _ReplyTo} ->
+	    %% no need to reply, just exit
+	    file:close(FD),
+	    exit(normal)
+    end.
 
 %% TODO: make a proper logger for asynchronous execution with submit/3
 

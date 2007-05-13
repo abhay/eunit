@@ -172,6 +172,7 @@ group_begin(Id, Desc, Es, St0) ->
 	       true ->
 		    ok
 	    end,
+	    %% TODO: eliminate this size calculation if possible
 	    Size = eunit_data:list_size(Es),
 	    St1#state{indent = I, skip = St1#state.skip + Size}
     end.
@@ -234,7 +235,8 @@ print_test_end(Time) ->
     io:fwrite("~sok\n", [T]).
 
 print_test_error({error, Exception}) ->
-    io:fwrite("*failed*\n::~p\n\n", [Exception]);
+    io:fwrite("*failed*\n::~s\n\n",
+	      [eunit_lib:format_exception(Exception)]);
 print_test_error({skipped, Reason}) ->
     io:fwrite("*did not run*\n::~s\n\n",
 	      [format_skipped(Reason)]).
@@ -266,32 +268,5 @@ format_cancel({exit, Reason}) ->
     io_lib:fwrite("*unexpected termination of test process*\n::~P\n\n",
 		  [Reason, 15]);
 format_cancel({abort, Reason}) ->
-    aborted(Reason).
+    eunit_lib:format_error(Reason).
 
-aborted(Reason) ->
-    case Reason of
-	{setup_failed, Exception} ->
-	    cancel_msg("context setup failed", "~p", [Exception]);
- 	{cleanup_failed, Exception} ->
- 	    cancel_msg("context cleanup failed", "~p", [Exception]);
- 	{instantiation_failed, Exception} ->
- 	    cancel_msg("instantiation of subtests failed", "~p",
-		       [Exception]);
- 	{bad_test, Bad} ->
- 	    cancel_msg("bad test descriptor", "~p", [Bad]);
- 	{no_such_function, {M,F,A}} ->
- 	    cancel_msg(io_lib:format("no such function: ~w:~w/~w", [M,F,A]),
-		      "", []);
- 	{module_not_found, M} ->
- 	    cancel_msg("test module not found", "~p", [M]);
- 	{application_not_found, A} ->
- 	    cancel_msg("application not found", "~p", [A]);
- 	{generator_failed, Exception} ->
- 	    cancel_msg("test generator failed", "~p", [Exception]);
- 	{file_read_error, {_R, Msg, F}} ->
- 	    cancel_msg("error reading file", "~s: ~s", [Msg, F])
-    end.
-
-cancel_msg(Title, Str, Args) ->
-    Msg = io_lib:format(Str, Args),
-    io_lib:fwrite("*** ~s ***\n::~s\n\n", [Title, Msg]).

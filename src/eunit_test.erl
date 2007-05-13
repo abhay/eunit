@@ -47,7 +47,7 @@ run_testfun(F) ->
     of Value ->
 	    {ok, Value}
     catch
-	{eunit_failure, Term} ->
+	{eunit_internal, Term} ->
 	    %% Internally generated: re-throw Term (lose the trace)
 	    throw(Term);
 	Class:Reason ->
@@ -158,7 +158,7 @@ macro_test_() ->
 %% Note that the wrapper fun is usually called by run_testfun/1, and the
 %% special exceptions thrown here are expected to be handled there.
 %%
-%% @throws {eunit_failure, wrapperError()}
+%% @throws {eunit_internal, wrapperError()}
 %%
 %% @type wrapperError() = {no_such_function, mfa()}
 %%                      | {module_not_found, moduleName()}
@@ -187,7 +187,7 @@ rethrow(Class, Reason, Trace) ->
     erlang:raise(Class, Reason, get_stacktrace(Trace)).
 
 fail(Term) ->
-    throw({eunit_failure, Term}).				   
+    throw({eunit_internal, Term}).				   
 
 
 -ifdef(TEST).
@@ -216,8 +216,8 @@ wrapper_test_exported_() ->
 %%    Cleanup = (any()) -> any()
 %%    Instantiate = (any()) -> tests()
 %%    Callback = (tests()) -> any()
-%% @throws {ErrorType, eunit_lib:exception()}
-%% ErrorType = setup_failed | instantiation_failed | cleanup_failed
+%% @throws {context_error, Error, eunit_lib:exception()}
+%% Error = setup_failed | instantiation_failed | cleanup_failed
 
 %% Note: if this function is moved, renamed, or gets a different number
 %% of arguments, the function eunit_test:prune_trace/2 must be updated
@@ -234,24 +234,23 @@ enter_context(Setup, Cleanup, Instantiate, Callback) ->
 			try Cleanup(R)
 			catch
 			    Class:Term ->
-				context_failure(cleanup_failed,
-						Class, Term)
+				context_error(cleanup_failed, Class, Term)
 			end
 		    end
 	    catch
 		Class:Term ->
-		    context_failure(instantiation_failed, Class, Term)
+		    context_error(instantiation_failed, Class, Term)
 	    end
     catch
 	Class:Term ->
-	    context_failure(setup_failed, Class, Term)
+	    context_error(setup_failed, Class, Term)
     end.
 
-context_failure(Type, Class, Term) ->
-    throw({Type, {Class, Term, get_stacktrace()}}).
+context_error(Type, Class, Term) ->
+    throw({context_error, Type, {Class, Term, get_stacktrace()}}).
 
 %% Instantiates a context with dummy values to make browsing possible
-%% @throws {instantiation_failed, eunit_lib:exception()}
+%% @throws {context_error, instantiation_failed, eunit_lib:exception()}
 
 %% Note: if this function is moved, renamed, or gets a different number
 %% of arguments, the function eunit_test:prune_trace/2 must be updated
@@ -266,8 +265,7 @@ browse_context(I, F) ->
 		    {_, T} -> T
 		catch
 		    Class:Term ->
-			context_failure(instantiation_failed, Class,
-					Term)
+			context_error(instantiation_failed, Class, Term)
 		end
 	 end,
     enter_context(S, C, I1, F).

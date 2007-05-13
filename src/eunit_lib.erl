@@ -32,7 +32,8 @@
 
 -export([dlist_next/1, uniq/1, fun_parent/1, is_string/1, browse_fun/1,
 	 command/1, command/2, command/3, trie_new/0, trie_store/2,
-	 trie_match/2, split_node/1, consult_file/1, list_dir/1]).
+	 trie_match/2, split_node/1, consult_file/1, list_dir/1,
+	 format_exit_term/1, format_exception/1, format_error/1]).
 
 
 %% Type definitions for describing exceptions
@@ -50,6 +51,121 @@
 %% @type mfa() = {moduleName(), functionName(), arity()}
 %% @type argList() = [term()]
 %% @type fileName() = string()
+
+
+%% ---------------------------------------------------------------------
+%% Formatting of error descriptors
+
+format_exception({Class,Term,Trace})
+  when is_atom(Class), is_list(Trace) ->
+    case is_stacktrace(Trace) of
+	true ->
+	    io_lib:format("~w:~P\n~s",
+			  [Class, Term, 15, format_stacktrace(Trace)]);
+	false ->
+	    format_term(Term)
+    end;
+format_exception(Term) ->
+    format_term(Term).
+
+format_term(Term) ->
+    io_lib:format("~P\n", [Term, 15]).
+
+format_exit_term(Term) ->
+    {Reason, Trace} = analyze_exit_term(Term),
+    io_lib:format("~P~s", [Reason, 15, Trace]).
+
+analyze_exit_term({Reason, [_|_]=Trace}=Term) ->
+    case is_stacktrace(Trace) of
+	true ->
+	    {Reason, format_stacktrace(Trace)};
+	false ->
+	    {Term, ""}
+    end;
+analyze_exit_term(Term) ->
+    {Term, ""}.
+
+is_stacktrace([]) ->
+    true;
+is_stacktrace([{M,F,A}|Fs]) when is_atom(M), is_atom(F), is_integer(A) ->
+    is_stacktrace(Fs);
+is_stacktrace([{M,F,As}|Fs]) when is_atom(M), is_atom(F), is_list(As) ->
+    is_stacktrace(Fs);
+is_stacktrace(_) ->
+    false.
+
+format_stacktrace(Trace) ->
+    format_stacktrace(Trace, "in function", "in call from").
+
+format_stacktrace([{M,F,A}|Fs], Pre, Pre1) when is_integer(A) ->
+    [io_lib:fwrite("  ~s ~w:~w/~w\n", [Pre, M, F, A])
+     | format_stacktrace(Fs, Pre1, Pre1)];
+format_stacktrace([{M,F,As}|Fs], Pre, Pre1) when is_list(As) ->
+    A = length(As),
+    C = case is_op(M,F,A) of
+	    true when A == 1 ->
+		[A1] = As,
+		io_lib:fwrite("~s ~s", [F,format_arg(A1)]);
+	    true when A == 2 ->
+		[A1, A2] = As,
+		io_lib:fwrite("~s ~s ~s",
+			      [format_arg(A1),F,format_arg(A2)]);
+	    false ->
+		io_lib:fwrite("~w(~s)", [F,format_arglist(As)])
+	end,
+    [io_lib:fwrite("  ~s ~w:~w/~w\n    called as ~s\n",
+		   [Pre,M,F,A,C])
+     | format_stacktrace(Fs,Pre1,Pre1)];
+format_stacktrace([],_Pre,_Pre1) ->
+    "".
+
+format_arg(A) ->
+    io_lib:format("~P",[A,15]).
+
+format_arglist([A]) ->
+    format_arg(A);
+format_arglist([A|As]) ->
+    [io_lib:format("~P,",[A,15]) | format_arglist(As)];
+format_arglist([]) ->
+    "".
+
+is_op(erlang, F, A) ->
+    erl_internal:arith_op(F, A)
+	orelse erl_internal:bool_op(F, A)
+	orelse erl_internal:comp_op(F, A)
+	orelse erl_internal:list_op(F, A)
+	orelse erl_internal:send_op(F, A);
+is_op(_M, _F, _A) ->
+    false.
+
+format_error({bad_test, Term}) ->
+    error_msg("bad test descriptor", "~P", [Term, 15]);
+format_error({generator_failed, Exception}) ->
+    error_msg("test generator failed", "~s",
+	      [format_exception(Exception)]);
+format_error({no_such_function, {M,F,A}})
+  when is_atom(M), is_atom(F), is_integer(A) ->
+    error_msg(io_lib:format("no such function: ~w:~w/~w", [M,F,A]),
+	      "", []);
+format_error({module_not_found, M}) ->
+    error_msg("test module not found", "~p", [M]);
+format_error({application_not_found, A}) when is_atom(A) ->
+    error_msg("application not found", "~w", [A]);
+format_error({file_read_error, {_R, Msg, F}}) ->
+    error_msg("error reading file", "~s: ~s", [Msg, F]);
+format_error({context_error, setup_failed, Exception}) ->
+    error_msg("context setup failed", "~s",
+	      [format_exception(Exception)]);
+format_error({context_error, cleanup_failed, Exception}) ->
+    error_msg("context cleanup failed", "~s",
+	      [format_exception(Exception)]);
+format_error({context_error, instantiation_failed, Exception}) ->
+    error_msg("instantiation of subtests failed", "~s",
+	      [format_exception(Exception)]).
+
+error_msg(Title, Fmt, Args) ->
+    Msg = io_lib:format("::"++Fmt, Args),    % gets indentation right
+    io_lib:fwrite("*** ~s ***\n~s\n\n", [Title, Msg]).
 
 
 %% ---------------------------------------------------------------------

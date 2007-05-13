@@ -45,6 +45,9 @@ stop(Server) ->
 
 -record(job, {super, test, options}).
 
+%% The `Super' process will receive a stream of status messages; see
+%% eunit_proc:status_message/3 for details.
+
 start_test(Server, Super, T, Options) ->
     command(Server, {start, #job{super = Super,
 				 test = T,
