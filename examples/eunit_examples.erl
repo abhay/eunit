@@ -7,7 +7,7 @@
 %% @copyright 2005 Richard Carlsson
 %% @private
 
--module(test).
+-module(eunit_examples).
 
 -compile(export_all).
 
