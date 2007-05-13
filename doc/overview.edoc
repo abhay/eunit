@@ -20,7 +20,7 @@ and flexible, is easy to use, and has small syntactical overhead.
 <li>{@section Terminology}</li>
 <li>{@section Getting started}</li>
 <li>{@section EUnit macros}</li>
-<li>{@section EUnit Test Representation}</li>
+<li>{@section EUnit test representation}</li>
 </ul>
 
 EUnit builds on ideas from the family of unit testing frameworks for
@@ -154,7 +154,7 @@ them, and easy to see which tests failed (so you can fix the bugs).
   <li>{@section Writing test generating functions}</li>
   <li>{@section An example}</li>
   <li>{@section Disabling testing}</li>
-  <li>{@section Avoiding Compile-time dependency on EUnit}</li>
+  <li>{@section Avoiding compile-time dependency on EUnit}</li>
 </ul>
 
 === Including the EUnit header file ===
@@ -312,7 +312,7 @@ small Erlang module shows how EUnit can be used in practice.
 `*' instead of `+' in the `fib' function. Of course, this showed up
 immediately when I ran the tests.)
 
-See {@section EUnit Test Representation} for a full list of all the ways
+See {@section EUnit test representation} for a full list of all the ways
 you can specify test sets in EUnit.
 
 === Disabling testing ===
@@ -342,7 +342,7 @@ option, like this:
 See {@section Compilation control macros} for details about these
 macros.
 
-=== Avoiding Compile-time dependency on EUnit ===
+=== Avoiding compile-time dependency on EUnit ===
 
 If you are distributing the source code for your application for other
 people to compile and run, you probably want to ensure that the code
@@ -367,6 +367,14 @@ way.
 Except where explicitly stated, using EUnit macros will never introduce
 run-time dependencies on the EUnit library code, regardless of whether
 your code is compiled with testing enabled or disabled.
+
+<ul>
+<li>{@section Basic macros}</li>
+<li>{@section Compilation control macros}</li>
+<li>{@section Utility macros}</li>
+<li>{@section Assert macros}</li>
+<li>{@section Macros for running external commands}</li>
+</ul>
 
 === Basic macros ===
 
@@ -564,22 +572,23 @@ A Unix-specific example:
 </dl>
 
 
-== EUnit Test Representation ==
+== EUnit test representation ==
 
 The way EUnit represents tests and test sets as data is flexible,
 powerful, and concise. This section describes the representation in
 detail.
 
 <ul>
-<li>{@section Simple Test Objects}</li>
-<li>{@section Test Sets and Deep Lists}</li>
+<li>{@section Simple test objects}</li>
+<li>{@section Test sets and deep lists}</li>
 <li>{@section Titles}</li>
 <li>{@section Primitives}</li>
 <li>{@section Control}</li>
 <li>{@section Fixtures}</li>
+<li>{@section Lazy generators}</li>
 </ul>
 
-=== Simple Test Objects ===
+=== Simple test objects ===
 
 A <em>simple test object</em> is one of the following:
 <ul>
@@ -603,7 +612,7 @@ line number). Evaluation of the function either <em>succeeds</em>, by
 returning some value (which is ignored), or <em>fails</em>, by throwing
 an exception.
 
-=== Test Sets and Deep Lists ===
+=== Test sets and deep lists ===
 
 A test set can be easily created by placing a sequence of test objects
 in a list. If `T_1', ..., `T_N' are individual test objects, then `[T_1,
@@ -851,3 +860,38 @@ operations. In general, 'local' should only be used when:
   <li>no further teardown needs to be done if the process is killed
   (i.e., no state outside the process was affected by the setup)</li>
 </ul>
+
+=== Lazy generators ===
+
+Sometimes, it can be convenient not to produce the whole set of test
+descriptions before the testing begins; for example, if you want to
+generate a huge amount of tests that would take up too much space to
+keep in memory all at once.
+
+It is fairly easy to write a generator which, each time it is called,
+either produces an empty list if it is done, or otherwise produces a
+list containing a single test case plus a new generator which will
+produce the rest of the tests. This demonstrates the basic pattern:
+
+```lazy_test_() ->
+       lazy_gen(10000).
+
+   lazy_gen(N) ->
+       {generator,
+        fun () ->
+            if N > 0 ->
+                   [?_test(...)
+                    | lazy_gen(N-1)];
+               true ->
+                   []
+            end
+        end}.'''
+
+When EUnit traverses the test representation in order to run the tests,
+the new generator will not be called to produce the next test until the
+previous test has been executed.
+
+Note that it is easiest to write this kind of recursive generator using
+a help function, like the `lazy_gen/1' function above. It can also be
+written using a recursive fun, if you prefer to not clutter your
+function namespace and are comfortable with writing that kind of code.
