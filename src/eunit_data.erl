@@ -691,7 +691,6 @@ list_size(Es) when is_list(Es) ->
     lists:foldl(fun (E, N) -> N + list_size(E) end, 0, Es).
 
 -ifdef(TEST).
-
 generator_exported_() ->
     generator().
 
@@ -729,8 +728,6 @@ data_test_() ->
 
      %%?_test({foreach, Setup, [T, T, T]})
     ].
-
-%% TODO: document how to write lazy generators
 
 lazy_test_() ->
     {spawn, [?_test(undefined = put(count, 0)),
