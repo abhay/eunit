@@ -526,7 +526,7 @@ unix_cmd_tests() ->
       ]},
      {"file setup and cleanup",
       setup,
-      fun () -> ?cmd("mktemp") end,
+      fun () -> ?cmd("mktemp tmp.XXXXXXXX") end,
       fun (File) -> ?cmd("rm " ++ File) end,
       fun (File) ->
 	      [?_assertCmd("echo xyzzy >" ++ File),
