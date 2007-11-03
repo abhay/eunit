@@ -80,9 +80,10 @@ rewrite([F | Fs], As, Module, Test) ->
     rewrite(Fs, [F | As], Module, Test);
 rewrite([], As, Module, Test) ->
     {if Test ->
+	     EUnit = {record_field,0,{atom,0,''},{atom,0,eunit}},
 	     [{function,0,test,0,
 	       [{clause,0,[],[],
-		 [{call,0,{remote,0,{atom,0,eunit},{atom,0,test}},
+		 [{call,0,{remote,0,EUnit,{atom,0,test}},
 		   [{atom,0,Module}]}]}]}
 	      | As];
 	true ->

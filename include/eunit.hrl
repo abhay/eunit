@@ -95,14 +95,14 @@
 	((fun () ->
 	    case (BoolExpr) of
 		true -> ok;
-		__V -> erlang:error({assertion_failed,
-				     [{module, ?MODULE},
-				      {line, ?LINE},
-				      {expression, (??BoolExpr)},
-				      {expected, true},
-				      {value, case __V of false -> __V;
-						  _ -> {not_a_boolean,__V}
-					      end}]})
+		__V -> .erlang:error({assertion_failed,
+				      [{module, ?MODULE},
+				       {line, ?LINE},
+				       {expression, (??BoolExpr)},
+				       {expected, true},
+				       {value, case __V of false -> __V;
+						   _ -> {not_a_boolean,__V}
+					       end}]})
 	    end
 	  end)())).
 -endif.
@@ -123,12 +123,12 @@
 	((fun () ->
 	    case (Expr) of
 		Guard -> ok;
-		__V -> erlang:error({assertMatch_failed,
-				     [{module, ?MODULE},
-				      {line, ?LINE},
-				      {expression, (??Expr)},
-				      {expected, (??Guard)},
-				      {value, __V}]})
+		__V -> .erlang:error({assertMatch_failed,
+				      [{module, ?MODULE},
+				       {line, ?LINE},
+				       {expression, (??Expr)},
+				       {expected, (??Guard)},
+				       {value, __V}]})
 	    end
 	  end)())).
 -endif.
@@ -141,26 +141,26 @@
 -define(assertException(Class, Term, Expr),
 	((fun () ->
 	    try (Expr) of
-	        __V -> erlang:error({assertException_failed,
-				     [{module, ?MODULE},
-				      {line, ?LINE},
-				      {expression, (??Expr)},
-				      {expected,
-				       "{ "++(??Class)++" , "++(??Term)
-				       ++" , [...] }"},
-				      {unexpected_success, __V}]})
+	        __V -> .erlang:error({assertException_failed,
+				      [{module, ?MODULE},
+				       {line, ?LINE},
+				       {expression, (??Expr)},
+				       {expected,
+					"{ "++(??Class)++" , "++(??Term)
+					++" , [...] }"},
+				       {unexpected_success, __V}]})
 	    catch
 		Class:Term -> ok;
 	        __C:__T ->
-		    erlang:error({assertException_failed,
-				  [{module, ?MODULE},
-				   {line, ?LINE},
-				   {expression, (??Expr)},
-				   {expected,
-				    "{ "++(??Class)++" , "++(??Term)
-				    ++" , [...] }"},
-				   {unexpected_exception,
-				    {__C, __T, erlang:get_stacktrace()}}]})
+		    .erlang:error({assertException_failed,
+				   [{module, ?MODULE},
+				    {line, ?LINE},
+				    {expression, (??Expr)},
+				    {expected,
+				     "{ "++(??Class)++" , "++(??Term)
+				     ++" , [...] }"},
+				    {unexpected_exception,
+				     {__C, __T, erlang:get_stacktrace()}}]})
 	    end
 	  end)())).
 -endif.
@@ -179,17 +179,17 @@
 %% require EUnit to be present at runtime, or at least eunit_lib.)
 
 %% these can be used for simply running commands in a controlled way
--define(_cmd_(Cmd), (eunit_lib:command(Cmd))).
+-define(_cmd_(Cmd), (.eunit_lib:command(Cmd))).
 -define(cmdStatus(N, Cmd),
 	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{(N), __Out} -> __Out;
-		{__N, _} -> erlang:error({command_failed,
-					  [{module, ?MODULE},
-					   {line, ?LINE},
-					   {command, (Cmd)},
-					   {expected_status,(N)},
-					   {status,__N}]})
+		{__N, _} -> .erlang:error({command_failed,
+					   [{module, ?MODULE},
+					    {line, ?LINE},
+					    {command, (Cmd)},
+					    {expected_status,(N)},
+					    {status,__N}]})
 	    end
 	  end)())).
 -define(_cmdStatus(N, Cmd), ?_test(?cmdStatus(N, Cmd))).
@@ -205,12 +205,12 @@
  	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{(N), _} -> ok;
-		{__N, _} -> erlang:error({assertCmd_failed,
-					  [{module, ?MODULE},
-					   {line, ?LINE},
-					   {command, (Cmd)},
-					   {expected_status,(N)},
-					   {status,__N}]})
+		{__N, _} -> .erlang:error({assertCmd_failed,
+					   [{module, ?MODULE},
+					    {line, ?LINE},
+					    {command, (Cmd)},
+					    {expected_status,(N)},
+					    {status,__N}]})
 	    end
 	  end)())).
 -endif.
@@ -223,12 +223,12 @@
  	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{_, (T)} -> ok;
-		{_, __T} -> erlang:error({assertCmdOutput_failed,
-					  [{module, ?MODULE},
-					   {line, ?LINE},
-					   {command,(Cmd)},
-					   {expected_output,(T)},
-					   {output,__T}]})
+		{_, __T} -> .erlang:error({assertCmdOutput_failed,
+					   [{module, ?MODULE},
+					    {line, ?LINE},
+					    {command,(Cmd)},
+					    {expected_output,(T)},
+					    {output,__T}]})
 	    end
 	  end)())).
 -endif.
