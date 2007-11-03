@@ -119,6 +119,21 @@ macro_test_() ->
 		     = run_testfun(F)
  	     end),
       ?_test(begin
+ 		 {?LINE, F} = ?_assertEqual(ok, ok),
+ 		 {ok, ok} = run_testfun(F)
+ 	     end),
+      ?_test(begin
+ 		 {?LINE, F} = ?_assertEqual(3, 1+1),
+ 		 {error,{error,{assertEqual_failed,
+				[{module,_},
+				 {line,_},
+				 {expression,_},
+				 {expected,3},
+				 {value,2}]},
+			 _}}
+		     = run_testfun(F)
+ 	     end),
+      ?_test(begin
  		 {?LINE, F} = ?_assertException(error, badarith,
  						erlang:error(badarith)),
  		 {ok, ok} = run_testfun(F)

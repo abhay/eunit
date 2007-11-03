@@ -134,6 +134,26 @@
 -endif.
 -define(_assertMatch(Guard, Expr), ?_test(?assertMatch(Guard, Expr))).
 
+%% This is a convenience macro which gives more detailed reports when
+%% the expected LHS value is not a pattern, but a computed value
+-ifdef(NOTEST).
+-define(assertEqual(Expect,Expr),ok).
+-else.
+-define(assertEqual(Expect, Expr),
+	((fun (__X) ->
+	    case (Expr) of
+		__X -> ok;
+		__V -> .erlang:error({assertEqual_failed,
+				      [{module, ?MODULE},
+				       {line, ?LINE},
+				       {expression, (??Expr)},
+				       {expected, __X},
+				       {value, __V}]})
+	    end
+	  end)(Expect))).
+-endif.
+-define(_assertEqual(Expect, Expr), ?_test(?assertEqual(Expect, Expr))).
+
 %% Note: Class and Term are patterns, and can not be used for value.
 -ifdef(NOTEST).
 -define(assertException(Class, Term, Expr),ok).
