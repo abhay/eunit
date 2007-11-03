@@ -65,15 +65,10 @@ form({function, _L, Name, 0, _Cs}, Tests, TestSuffix, GeneratorSuffix,
 form(_, Tests, _, _, _) ->
     Tests.
 
+rewrite([{attribute,_,module,{Name,_Ps}}=M | Fs], Exports) ->
+    module_decl(Name, M, Fs, Exports);
 rewrite([{attribute,_,module,Name}=M | Fs], Exports) ->
-    Module = if is_atom(Name) -> Name;
-		true -> list_to_atom(packages:concat(Name))
-	     end,
-    {Fs1, Test} = rewrite(Fs, [], Module, true),
-    Es = if Test -> [{test,0} | Exports];
-	    true -> Exports
-	 end,
-    [M, {attribute,0,export,Es} | lists:reverse(Fs1)];
+    module_decl(Name, M, Fs, Exports);
 rewrite([F | Fs], Exports) ->
     [F | rewrite(Fs, Exports)];
 rewrite([], _Exports) ->
@@ -94,3 +89,13 @@ rewrite([], As, Module, Test) ->
 	     As
      end,
      Test}.
+
+module_decl(Name, M, Fs, Exports) ->
+    Module = if is_atom(Name) -> Name;
+		true -> list_to_atom(packages:concat(Name))
+	     end,
+    {Fs1, Test} = rewrite(Fs, [], Module, true),
+    Es = if Test -> [{test,0} | Exports];
+	    true -> Exports
+	 end,
+    [M, {attribute,0,export,Es} | lists:reverse(Fs1)].
