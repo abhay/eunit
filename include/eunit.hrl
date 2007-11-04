@@ -17,10 +17,18 @@
 %%
 %% Copyright (C) 2004-2006 Mickaël Rémond, Richard Carlsson
 
-%% Including this file turns on testing, unless explicitly disabled by
-%% defining NOTEST. If both NOTEST and TEST are defined, then TEST takes
-%% precedence, and NOTEST will become undefined. The macro EUNIT will be
-%% defined if and only if TEST is defined, after including this file.
+%% Including this file turns on testing and defines TEST, unless NOTEST
+%% is defined before the file is included. If both NOTEST and TEST are
+%% already defined, then TEST takes precedence, and NOTEST will become
+%% undefined.
+%%
+%% If including this file causes TEST to be defined, then NOASSERT will
+%% be undefined, even if it was previously defined. If both ASSERT and
+%% NOASSERT are defined before the file is included, then ASSERT takes
+%% precedence, and NOASSERT will become undefined regardless of TEST.
+%% 
+%% After including this file, EUNIT will be defined if and only if TEST
+%% is defined.
 
 -ifndef(EUNIT_HRL).
 -define(EUNIT_HRL, true).
@@ -30,9 +38,17 @@
 -undef(NOTEST).
 -endif.
 
+%% allow NODEBUG to imply NOASSERT, unless overridden below
+-ifdef(NODEBUG).
+-ifndef(NOASSERT).
+-define(NOASSERT, true).
+-endif.
+-endif.
+
 %% note that the main switch used within this file is NOTEST; however,
 %% both TEST and EUNIT may be used to check whether testing is enabled
 -ifndef(NOTEST).
+-undef(NOASSERT).    % testing requires that assertions are enabled
 -ifndef(TEST).
 -define(TEST, true).
 -endif.
@@ -40,8 +56,12 @@
 -define(EUNIT, true).
 -endif.
 -else.
--undef(TEST).
 -undef(EUNIT).
+-endif.
+
+%% allow ASSERT to override NOASSERT (regardless of TEST/NOTEST)
+-ifdef(ASSERT).
+-undef(NOASSERT).
 -endif.
 
 %% Parse transforms for automatic exporting/stripping of test functions.
@@ -81,9 +101,9 @@
 -define(IF(B,T,F), (case (B) of true->(T); false->(F) end)).
 -endif.
 
--ifdef(NOTEST).
+-ifdef(NOASSERT).
 %% The plain assert macro should be defined to do nothing if this file
-%% is included when testing is turned off.
+%% is included when debugging/testing is turned off.
 -ifndef(assert).
 -define(assert(BoolExpr),ok).
 -endif.
@@ -116,7 +136,7 @@
 
 %% This is mostly a convenience which gives more detailed reports.
 %% Note: Guard is a guarded pattern, and can not be used for value.
--ifdef(NOTEST).
+-ifdef(NOASSERT).
 -define(assertMatch(Guard,Expr),ok).
 -else.
 -define(assertMatch(Guard, Expr),
@@ -136,7 +156,7 @@
 
 %% This is a convenience macro which gives more detailed reports when
 %% the expected LHS value is not a pattern, but a computed value
--ifdef(NOTEST).
+-ifdef(NOASSERT).
 -define(assertEqual(Expect,Expr),ok).
 -else.
 -define(assertEqual(Expect, Expr),
@@ -155,7 +175,7 @@
 -define(_assertEqual(Expect, Expr), ?_test(?assertEqual(Expect, Expr))).
 
 %% Note: Class and Term are patterns, and can not be used for value.
--ifdef(NOTEST).
+-ifdef(NOASSERT).
 -define(assertException(Class, Term, Expr),ok).
 -else.
 -define(assertException(Class, Term, Expr),
@@ -217,8 +237,8 @@
 -define(_cmd(Cmd), ?_test(?cmd(Cmd))).
 
 %% these are only used for testing; they always return 'ok' on success,
-%% and have no effect if testing is turned off
--ifdef(NOTEST).
+%% and have no effect if debugging/testing is turned off
+-ifdef(NOASSERT).
 -define(assertCmdStatus(N, Cmd),ok).
 -else.
 -define(assertCmdStatus(N, Cmd),
@@ -236,7 +256,7 @@
 -endif.
 -define(assertCmd(Cmd), ?assertCmdStatus(0, Cmd)).
 
--ifdef(NOTEST).
+-ifdef(NOASSERT).
 -define(assertCmdOutput(T, Cmd),ok).
 -else.
 -define(assertCmdOutput(T, Cmd),
@@ -256,5 +276,25 @@
 -define(_assertCmdStatus(N, Cmd), ?_test(?assertCmdStatus(N, Cmd))).
 -define(_assertCmd(Cmd), ?_test(?assertCmd(Cmd))).
 -define(_assertCmdOutput(T, Cmd), ?_test(?assertCmdOutput(T, Cmd))).
+
+%% Macros to simplify debugging (in particular, they work even when the
+%% standard output is being redirected by EUnit while running tests)
+
+-ifdef(NODEBUG).
+-define(debugMsg(S), ok).
+-define(debugHere, ok).
+-define(debugFmt(S, As), ok).
+-define(debugVal(X), ok).
+-else.
+-define(debugMsg(S),
+	(begin
+	     io:fwrite(user, <<"** ~w: ~w: ~s\n">>,
+		       [?MODULE, ?LINE, S]),
+	     ok
+	 end)).
+-define(debugHere, (?debugMsg("<-"))).
+-define(debugFmt(S, As), (?debugMsg(io_lib:format((S), (As))))).
+-define(debugVal(X), (?debugFmt(<<"~s = ~P">>, [(??X), (X), 10]))).
+-endif.
 
 -endif. % EUNIT_HRL
