@@ -50,7 +50,6 @@ parse_transform(Forms, Options) ->
 form({function, _L, Name, 0, _Cs}=Form, Acc, Exports, TestSuffix,
      GeneratorSuffix, ExportSuffix) ->
     N = atom_to_list(Name),
-    io:fwrite("function: ~w, exports: ~w", [{Name,0}, sets:to_list(Exports)]),
     case not sets:is_element({Name, 0}, Exports)
 	andalso (lists:suffix(TestSuffix, N)
 		 orelse lists:suffix(GeneratorSuffix, N)
