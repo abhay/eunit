@@ -446,7 +446,7 @@ check_setup_list([{Tag, S} | Es], T)
   when is_atom(Tag), is_function(S) ->
     check_arity(S, 0, T),
     check_setup_list(Es, T);
-check_setup_list([], T) ->
+check_setup_list([], _T) ->
     ok;
 check_setup_list(_, T) ->
     bad_test(T).
@@ -471,21 +471,21 @@ group(#group{tests = T0, desc = Desc, order = Order, context = Context,
     {T2, _} = lookahead(Ts),
     case T1 of
 	#test{desc = Desc1, timeout = Timeout1}
-	when T2 == none, Spawn == undefined, Context == undefined,
-	     ((Desc == undefined) or (Desc1 == undefined)),
-	     ((Timeout == undefined) or (Timeout1 == undefined)) ->
+	when T2 =:= none, Spawn =:= undefined, Context =:= undefined,
+	     ((Desc =:= undefined) or (Desc1 =:= undefined)),
+	     ((Timeout =:= undefined) or (Timeout1 =:= undefined)) ->
 	    %% a single test within a non-spawn/setup group: put the
 	    %% information directly on the test; drop the order
 	    T1#test{desc = join_properties(Desc, Desc1),
 		    timeout = join_properties(Timeout, Timeout1)};
 	#group{desc = Desc1, order = Order1, context = Context1,
 	       spawn = Spawn1, timeout = Timeout1}
-	when T2 == none,
-	     ((Desc == undefined) or (Desc1 == undefined)),
-	     ((Order == undefined) or (Order1 == undefined)),
-	     ((Context == undefined) or (Context1 == undefined)),
-	     ((Spawn == undefined) or (Spawn1 == undefined)),
-	     ((Timeout == undefined) or (Timeout1 == undefined)) ->
+	when T2 =:= none,
+	     ((Desc =:= undefined) or (Desc1 =:= undefined)),
+	     ((Order =:= undefined) or (Order1 =:= undefined)),
+	     ((Context =:= undefined) or (Context1 =:= undefined)),
+	     ((Spawn =:= undefined) or (Spawn1 =:= undefined)),
+	     ((Timeout =:= undefined) or (Timeout1 =:= undefined)) ->
 	    %% two nested groups with non-conflicting properties
 	    T1#group{desc = join_properties(Desc, Desc1),
 		     order = join_properties(Order, Order1),
