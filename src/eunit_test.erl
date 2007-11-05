@@ -24,7 +24,7 @@
 -module(eunit_test).
 
 -export([run_testfun/1, function_wrapper/2, enter_context/4,
-	 browse_context/2]).
+	 browse_context/2, multi_setup/1]).
 
 
 -include("eunit.hrl").
@@ -32,14 +32,30 @@
 
 
 %% ---------------------------------------------------------------------
+%% Getting a cleaned up stack trace. (We don't want it to include
+%% eunit's own internal functions. This complicates self-testing
+%% somewhat, but you can't have everything.) Note that we assume that
+%% this particular module is the boundary between eunit and user code.
+
+get_stacktrace() ->
+    get_stacktrace([]).
+
+get_stacktrace(Ts) ->
+    eunit_lib:uniq(prune_trace(erlang:get_stacktrace(), Ts)).
+
+prune_trace([{?MODULE, _, _} | _Rest], Tail) ->
+    Tail;
+prune_trace([T | Ts], Tail) ->
+    [T | prune_trace(Ts, Tail)];
+prune_trace([], Tail) ->
+    Tail.
+
+
+%% ---------------------------------------------------------------------
 %% Test runner
 
 %% @spec ((any()) -> any()) -> {ok, Value} | {error, eunit_lib:exception()}
 %% @throws wrapperError()
-
-%% Note: if this function is moved, renamed, or gets a different number
-%% of arguments, the function eunit_test:prune_trace/2 must be updated
-%% correspondingly.
 
 run_testfun(F) ->
     try
@@ -234,10 +250,6 @@ wrapper_test_exported_() ->
 %% @throws {context_error, Error, eunit_lib:exception()}
 %% Error = setup_failed | instantiation_failed | cleanup_failed
 
-%% Note: if this function is moved, renamed, or gets a different number
-%% of arguments, the function eunit_test:prune_trace/2 must be updated
-%% correspondingly.
-
 enter_context(Setup, Cleanup, Instantiate, Callback) ->
     try Setup() of
 	R ->
@@ -267,14 +279,8 @@ context_error(Type, Class, Term) ->
 %% Instantiates a context with dummy values to make browsing possible
 %% @throws {context_error, instantiation_failed, eunit_lib:exception()}
 
-%% Note: if this function is moved, renamed, or gets a different number
-%% of arguments, the function eunit_test:prune_trace/2 must be updated
-%% correspondingly.
-
 browse_context(I, F) ->
     %% Browse: dummy setup/cleanup and a wrapper for the instantiator
-    S = fun () -> ok end,
-    C = fun (_) -> ok end,
     I1 = fun (_) ->
 		try eunit_lib:browse_fun(I) of
 		    {_, T} -> T
@@ -283,27 +289,46 @@ browse_context(I, F) ->
 			context_error(instantiation_failed, Class, Term)
 		end
 	 end,
-    enter_context(S, C, I1, F).
+    enter_context(fun ok/0, fun ok/1, I1, F).
 
+ok() -> ok.
+ok(_) -> ok.
 
-%% ---------------------------------------------------------------------
-%% Getting a cleaned up stack trace. (We don't want it to include
-%% eunit's own internal functions. This complicates self-testing
-%% somewhat, but you can't have everything.)
+%% This generates single setup/cleanup functions from a list of tuples
+%% on the form {Tag, Setup, Cleanup}, where the setup function always
+%% backs out correctly from partial completion.
 
-get_stacktrace() ->
-    get_stacktrace([]).
+multi_setup(List) ->
+    {SetupAll, CleanupAll} = multi_setup(List, fun ok/1),
+    %% must reverse back and forth here in order to present the list in
+    %% "natural" order to the test instantiation function
+    {fun () -> lists:reverse(SetupAll([])) end,
+     fun (Rs) -> CleanupAll(lists:reverse(Rs)) end}.
 
-get_stacktrace(Ts) ->
-    eunit_lib:uniq(prune_trace(erlang:get_stacktrace(), Ts)).
-
-prune_trace([{eunit_test, run_testfun, 1} | _Rest], Tail) ->
-    Tail;
-prune_trace([{eunit_test, enter_context, 4} | _Rest], Tail) ->
-    Tail;
-prune_trace([{eunit_test, browse_context, 2} | _Rest], Tail) ->
-    Tail;
-prune_trace([T | Ts], Tail) ->
-    [T | prune_trace(Ts, Tail)];
-prune_trace([], Tail) ->
-    Tail.
+multi_setup([{Tag, S, C} | Es], CleanupPrev) ->
+    Cleanup = fun ([R | Rs]) ->
+		      try C(R) of
+			  _ -> CleanupPrev(Rs)
+		      catch
+			  Class:Term ->
+			      throw({Tag, {Class, Term,
+					   eunit_test:get_stacktrace()}})
+		      end
+	      end,
+    {SetupRest, CleanupAll} = multi_setup(Es, Cleanup),
+    {fun (Rs) ->
+	     try S() of
+		 R ->
+		     SetupRest([R|Rs])
+	     catch
+		 Class:Term ->
+		     CleanupPrev(Rs),
+		     throw({Tag, {Class, Term,
+				  eunit_test:get_stacktrace()}})
+	     end
+     end,
+     CleanupAll};
+multi_setup([{Tag, S} | Es], CleanupPrev) ->
+    multi_setup([{Tag, S, fun ok/1} | Es], CleanupPrev);
+multi_setup([], CleanupAll) ->
+    {fun (Rs) -> Rs end, CleanupAll}.

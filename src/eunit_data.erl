@@ -253,12 +253,16 @@ parse({spawn, T}) ->
     group(#group{tests = T, spawn = local});
 parse({spawn, N, T}) when is_atom(N) ->
     group(#group{tests = T, spawn = {remote, N}});
-parse({setup, S, I}) when is_function(S) ->
-    parse({setup, S, fun ok/1, I});
+parse({setup, S, I}) when is_function(S); is_list(S) ->
+    parse({setup, ?DEFAULT_SETUP_PROCESS, S, I});
 parse({setup, S, C, I}) when is_function(S), is_function(C) ->
     parse({setup, ?DEFAULT_SETUP_PROCESS, S, C, I});
 parse({setup, P, S, I}) when is_function(S) ->
     parse({setup, P, S, fun ok/1, I});
+parse({setup, P, L, I} = T) when is_list(L) ->
+    check_setup_list(L, T),
+    {S, C} = eunit_test:multi_setup(L),
+    parse({setup, P, S, C, I});
 parse({setup, P, S, C, I} = T)
   when is_function(S), is_function(C), is_function(I) ->
     check_arity(S, 0, T),
@@ -433,11 +437,25 @@ check_arity(F, N, T) when is_function(F) ->
 check_arity(_, _, T) ->
     bad_test(T).
 
+check_setup_list([{Tag, S, C} | Es], T)
+  when is_atom(Tag), is_function(S), is_function(C) ->
+    check_arity(S, 0, T),
+    check_arity(C, 1, T),
+    check_setup_list(Es, T);
+check_setup_list([{Tag, S} | Es], T)
+  when is_atom(Tag), is_function(S) ->
+    check_arity(S, 0, T),
+    check_setup_list(Es, T);
+check_setup_list([], T) ->
+    ok;
+check_setup_list(_, T) ->
+    bad_test(T).
+
 bad_test(T) ->
     throw({bad_test, T}).
 
-ok(_) -> ok.    
-ok(_, _) -> ok.    
+ok(_) -> ok.
+ok(_, _) -> ok.
 
 %% This does some look-ahead and folds nested groups and tests where
 %% possible. E.g., {String, Test} -> Test#test{desc = String}.
