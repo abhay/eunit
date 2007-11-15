@@ -13,7 +13,7 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% $Id: eunit.hrl,v 1.1 2004/12/04 15:12:36 mremond Exp $
+%% $Id$
 %%
 %% Copyright (C) 2004-2006 Mickaël Rémond, Richard Carlsson
 
