@@ -2,9 +2,7 @@
 include ../vsn.mk
 
 EMULATOR=beam
-# must have "eunit/ebin" as part of the path for include_lib to work, for now
-EBIN=../../eunit/ebin
-#EBIN=../ebin
+EBIN=../ebin
 INCLUDE=../include
 
 APP_TARGET=$(EBIN)/eunit.app
