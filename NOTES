@@ -162,7 +162,8 @@ Concepts and features
 
  - Whole-application testing (using .app files?)
 
-   * TODO: Think more about testing whole applications
+   * {application, AppName}
+   * {file, AppFile}
 
  - Identification of tests within a test set (e.g., which succeeded,
    which failed, repeating selected tests or groups of tests, etc.)
