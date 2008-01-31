@@ -8,7 +8,7 @@ include vsn.mk
 DOC_OPTS={def,{version,\"$(EUNIT_VSN)\"}}
 
 
-all: subdirs test
+all: subdirs
 
 subdirs:
 	@for d in $(SUB_DIRECTORIES); do \
