@@ -176,6 +176,21 @@ This will have the following effect:
   writing tests</li>
 </ul>
 
+<strong>Note:</strong> For `-include_lib(...)' to work, the Erlang
+module search path <em>must</em> contain a directory whose name ends in
+`eunit/ebin' (pointing to the `ebin' subdirectory of the EUnit
+installation directory). If EUnit is installed as `lib/eunit' under your
+Erlang/OTP system directory, its `ebin' subdirectory will be
+automatically added to the search path when Erlang starts. Otherwise,
+you need to add the directory explicitly, by passing a `-pa' flag to the
+`erl' or `erlc' command. For example, a Makefile could contain the
+following action for compiling `.erl' files:
+```erlc -pa "path/to/eunit/ebin" $(ERL_COMPILE_FLAGS) -o$(EBIN) $<'''
+or if you want Eunit to always be available when you run Erlang
+interactively, you can add a line like the following to your
+`$HOME/.erlang' file:
+```code:add_path("/path/to/eunit/ebin").'''
+
 === Writing simple test functions ===
 
 The EUnit framework makes it extremely easy to write unit tests in
