@@ -35,7 +35,7 @@
 	 watch_regexp/1, watch_regexp/2, watch_regexp/3, watch_app/1,
 	 watch_app/2, watch_app/3]).
 
--export([testp/1, debug/1]). %% for development testing, not official
+-export([testp/1]). %% for development testing, not official
 
 
 %% EUnit entry points
@@ -194,6 +194,3 @@ event_logger_loop(Reference, FD) ->
 
 devnull() ->
     receive _ -> devnull() end.
-
-debug(Term) ->
-    io:fwrite(user, "*eunit debug*: ~P\n", [Term, 15]).

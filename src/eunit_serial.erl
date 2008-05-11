@@ -13,7 +13,7 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% $Id:$ 
+%% $Id$ 
 %%
 %% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
@@ -75,7 +75,7 @@ item(Id, ParentId, N0, St0) ->
 	{{cancel, Done, Msg}, St1} ->
 	    {Done, cast(Msg, St1)};
 	{{ok, Msg}, St1} ->
-	    %%eunit:debug({got_begin, Id, Msg}),
+	    %%?debugVal({got_begin, Id, Msg}),
 	    cast(Msg, St1),
 	    St2 = case Msg of
 		      {status, _, {progress, 'begin', group}} ->
@@ -88,7 +88,7 @@ item(Id, ParentId, N0, St0) ->
 		{{cancel, Done, Msg1}, St3} ->
 		    {Done, cast(Msg1, St3)};
 		{{ok, Msg1}, St3} ->
-		    %%eunit:debug({got_end, Id, Msg1}),
+		    %%?debugVal({got_end, Id, Msg1}),
 		    {false, cast(Msg1, St3)}
 	    end
     end.
@@ -107,7 +107,7 @@ cast(M, St) ->
     St.
 
 wait(Id, Type, ParentId, N0, St) ->
-    %%eunit:debug({wait, Id, Type}),
+    %%?debugVal({wait, Id, Type}),
     case check_cancelled(Id, St) of
 	no ->
 	    case recall(Id, St) of
@@ -117,7 +117,7 @@ wait(Id, Type, ParentId, N0, St) ->
 		    {{ok, Msg}, forget(Id, St)}
 	    end;
 	Why ->
-	    %%eunit:debug({cancelled, Why, Id, ParentId}),
+	    %%?debugVal({cancelled, Why, Id, ParentId}),
 	    Done = (Why =:= prefix),
 	    {{cancel, Done, recall(Id, St)}, forget(Id, St)}
     end.
@@ -125,13 +125,13 @@ wait(Id, Type, ParentId, N0, St) ->
 wait_1(Id, Type, ParentId, N0, St) ->
     receive
 	{status, Id, {progress, Type, _}}=Msg ->
-	    %%eunit:debug({Type, ParentId, Id}),
+	    %%?debugVal({Type, ParentId, Id}),
 	    {{ok, Msg}, St};
 	{status,ParentId,{progress,'end',{N0,_,_}}}=Msg ->
-	    %%eunit:debug({end_group, ParentId, Id}),
+	    %%?debugVal({end_group, ParentId, Id}),
 	    {none, remember(ParentId, Msg, St)};
 	{status, SomeId, {cancel, _Cause}}=Msg ->
-	    %%eunit:debug({got_cancel, SomeId, ParentId, Id}),
+	    %%?debugVal({got_cancel, SomeId, ParentId, Id}),
 	    St1 = set_cancelled(SomeId, Msg, St),
 	    wait(Id, Type, ParentId, N0, St1)
     end.

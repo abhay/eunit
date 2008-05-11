@@ -313,13 +313,13 @@ parse({node, N, A, T1}=T) when is_atom(N) ->
 %% 				       end;
 %% 				   _ -> false
 %% 			       end,
-%% 			   eunit:debug({started, StartedNet}),
+%% 			   ?debugVal({started, StartedNet}),
 			   {Name, Host} = eunit_lib:split_node(N),
 			   {ok, Node} = slave:start_link(Host, Name, A),
 			   {Node, StartedNet}
 		   end,
 		   fun ({Node, StopNet}) ->
-%% 			   eunit:debug({stop, StopNet}),
+%% 			   ?debugVal({stop, StopNet}),
 			   slave:stop(Node),
 			   case StopNet of
 			       true -> net_kernel:stop();
