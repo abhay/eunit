@@ -13,7 +13,7 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% $Id:$ 
+%% $Id$ 
 %%
 %% @author Richard Carlsson <richardc@it.uu.se>
 %% @copyright 2006 Richard Carlsson
@@ -202,7 +202,7 @@ parse({foreach, P, S, C, Fs} = T)
     check_arity(C, 1, T),
     case Fs of
 	[F | Fs1] ->
-	    {data, [{setup, P, S, C, F}, {foreach, S, C, Fs1}]};
+	    {data, [{setup, P, S, C, F}, {foreach, P, S, C, Fs1}]};
 	[] ->
 	    {data, []}
     end;
@@ -224,7 +224,7 @@ parse({foreachx, P, S1, C1, Ps} = T)
 	    S = fun () -> S1(X) end,
 	    C = fun (R) -> C1(X, R) end,
 	    F = fun (R) -> F1(X, R) end,
-	    {data, [{setup, P, S, C, F}, {foreachx, S1, C1, Ps1}]};
+	    {data, [{setup, P, S, C, F}, {foreachx, P, S1, C1, Ps1}]};
 	[_|_] ->
 	    bad_test(T);
 	[] ->
